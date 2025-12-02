@@ -121,3 +121,90 @@ func (ic *InstanceController) UpdateInstanceName(c *gin.Context) {
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "实例名称更新成功"))
 }
+
+type ChangeIPRequest struct {
+	UserId     string `json:"userId" binding:"required"`
+	InstanceId string `json:"instanceId" binding:"required"`
+}
+
+func (ic *InstanceController) ChangePublicIP(c *gin.Context) {
+	var req ChangeIPRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	newIP, err := ic.instanceService.ChangePublicIP(req.UserId, req.InstanceId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(map[string]string{"newIP": newIP}, "IP更改成功"))
+}
+
+type UpdateInstanceConfigRequest struct {
+	UserId      string  `json:"userId" binding:"required"`
+	InstanceId  string  `json:"instanceId" binding:"required"`
+	Ocpus       float32 `json:"ocpus" binding:"required,gt=0"`
+	MemoryInGBs float32 `json:"memoryInGBs" binding:"required,gt=0"`
+}
+
+func (ic *InstanceController) UpdateInstanceConfig(c *gin.Context) {
+	var req UpdateInstanceConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	if err := ic.instanceService.UpdateInstanceConfig(req.UserId, req.InstanceId, req.Ocpus, req.MemoryInGBs); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(nil, "实例配置更新成功"))
+}
+
+type UpdateBootVolumeRequest struct {
+	UserId     string `json:"userId" binding:"required"`
+	InstanceId string `json:"instanceId" binding:"required"`
+	SizeInGBs  int64  `json:"sizeInGBs" binding:"required,gt=0"`
+	VpusPerGB  int64  `json:"vpusPerGB" binding:"required,gt=0"`
+}
+
+func (ic *InstanceController) UpdateBootVolume(c *gin.Context) {
+	var req UpdateBootVolumeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	if err := ic.instanceService.UpdateBootVolumeConfig(req.UserId, req.InstanceId, req.SizeInGBs, req.VpusPerGB); err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(nil, "引导卷配置更新成功"))
+}
+
+type CreateCloudShellRequest struct {
+	UserId     string `json:"userId" binding:"required"`
+	InstanceId string `json:"instanceId" binding:"required"`
+	PublicKey  string `json:"publicKey" binding:"required"`
+}
+
+func (ic *InstanceController) CreateCloudShell(c *gin.Context) {
+	var req CreateCloudShellRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	result, err := ic.instanceService.CreateCloudShellConnection(req.UserId, req.InstanceId, req.PublicKey)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(result, "Cloud Shell连接创建成功"))
+}

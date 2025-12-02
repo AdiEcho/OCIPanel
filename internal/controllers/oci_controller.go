@@ -542,7 +542,7 @@ func (oc *OciController) GetTrafficData(c *gin.Context) {
 	}
 
 	ctx := context.Background()
-	trafficData, err := oc.ociService.GetTrafficData(ctx, &user, req.InstanceID, req.VnicID, req.StartTime, req.EndTime)
+	trafficData, err := oc.ociService.GetTrafficData(ctx, &user, req.VnicID, req.StartTime, req.EndTime)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
 		return

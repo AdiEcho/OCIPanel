@@ -53,3 +53,6 @@ Thumbs.db
 
 # Config
 config.toml
+/keys/.gitkeep
+/frontend/.postcssrc.json
+/go.sum

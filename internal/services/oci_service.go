@@ -226,8 +226,10 @@ func (s *OCIService) LaunchInstance(ctx context.Context, user *models.OciUser, p
 			CompartmentId:      &params.CompartmentId,
 			AvailabilityDomain: &params.AvailabilityDomain,
 			DisplayName:        &params.DisplayName,
-			ImageId:            &params.ImageId,
-			Shape:              &params.Shape,
+			SourceDetails: &core.InstanceSourceViaImageDetails{
+				ImageId: &params.ImageId,
+			},
+			Shape: &params.Shape,
 			CreateVnicDetails: &core.CreateVnicDetails{
 				SubnetId: &params.SubnetId,
 			},
@@ -286,11 +288,16 @@ func (s *OCIService) GetInstanceDetails(ctx context.Context, user *models.OciUse
 	}
 
 	// 获取镜像信息
-	if instance.ImageId != nil {
-		imageReq := core.GetImageRequest{ImageId: instance.ImageId}
-		imageResp, err := computeClient.GetImage(ctx, imageReq)
-		if err == nil && imageResp.DisplayName != nil {
-			info.ImageName = *imageResp.DisplayName
+	if instance.SourceDetails != nil {
+		switch sourceDetails := instance.SourceDetails.(type) {
+		case core.InstanceSourceViaImageDetails:
+			if sourceDetails.ImageId != nil {
+				imageReq := core.GetImageRequest{ImageId: sourceDetails.ImageId}
+				imageResp, err := computeClient.GetImage(ctx, imageReq)
+				if err == nil && imageResp.DisplayName != nil {
+					info.ImageName = *imageResp.DisplayName
+				}
+			}
 		}
 	}
 
@@ -460,8 +467,9 @@ func (s *OCIService) ListVCNs(ctx context.Context, user *models.OciUser, compart
 			State:       string(vcn.LifecycleState),
 			Subnets:     []models.SubnetInfo{},
 		}
-		if vcn.CidrBlock != nil {
-			vcnInfo.CIDRBlock = *vcn.CidrBlock
+		// 使用 CidrBlocks 替代已弃用的 CidrBlock
+		if len(vcn.CidrBlocks) > 0 {
+			vcnInfo.CIDRBlock = vcn.CidrBlocks[0]
 		}
 		if vcn.TimeCreated != nil {
 			vcnInfo.CreateTime = vcn.TimeCreated.Format("2006-01-02 15:04:05")
@@ -482,8 +490,9 @@ func (s *OCIService) ListVCNs(ctx context.Context, user *models.OciUser, compart
 				if subnet.DisplayName != nil {
 					subnetInfo.DisplayName = *subnet.DisplayName
 				}
-				if subnet.CidrBlock != nil {
-					subnetInfo.CIDRBlock = *subnet.CidrBlock
+				// 使用 Ipv4CidrBlocks 替代已弃用的 CidrBlock
+				if len(subnet.Ipv4CidrBlocks) > 0 {
+					subnetInfo.CIDRBlock = subnet.Ipv4CidrBlocks[0]
 				}
 				if subnet.AvailabilityDomain != nil {
 					subnetInfo.AvailabilityDomain = *subnet.AvailabilityDomain
@@ -499,6 +508,192 @@ func (s *OCIService) ListVCNs(ctx context.Context, user *models.OciUser, compart
 	}
 
 	return vcns, nil
+}
+
+// ChangePublicIP 更改实例公网IP
+func (s *OCIService) ChangePublicIP(ctx context.Context, user *models.OciUser, vnicId string) (string, error) {
+	vnClient, err := s.GetVirtualNetworkClient(user)
+	if err != nil {
+		return "", err
+	}
+
+	// 获取当前VNIC信息
+	vnicReq := core.GetVnicRequest{VnicId: &vnicId}
+	vnicResp, err := vnClient.GetVnic(ctx, vnicReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to get VNIC: %w", err)
+	}
+
+	// 检查是否有公网IP
+	if vnicResp.PublicIp == nil || *vnicResp.PublicIp == "" {
+		return "", fmt.Errorf("VNIC does not have a public IP")
+	}
+
+	// 获取现有的public IP对象
+	listPublicIpsReq := core.ListPublicIpsRequest{
+		Scope:         core.ListPublicIpsScopeRegion,
+		CompartmentId: &user.OciTenantID,
+		Lifetime:      core.ListPublicIpsLifetimeEphemeral,
+	}
+	publicIpsResp, err := vnClient.ListPublicIps(ctx, listPublicIpsReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to list public IPs: %w", err)
+	}
+
+	// 找到对应的publicIP对象
+	var publicIpId *string
+	for _, pip := range publicIpsResp.Items {
+		if pip.AssignedEntityId != nil && *pip.AssignedEntityId == vnicId {
+			publicIpId = pip.Id
+			break
+		}
+	}
+
+	if publicIpId == nil {
+		return "", fmt.Errorf("could not find public IP object for VNIC")
+	}
+
+	// 删除现有公网IP
+	deleteReq := core.DeletePublicIpRequest{PublicIpId: publicIpId}
+	_, err = vnClient.DeletePublicIp(ctx, deleteReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to delete public IP: %w", err)
+	}
+
+	// 等待一下确保删除完成
+	time.Sleep(2 * time.Second)
+
+	// 创建新的临时公网IP
+	createReq := core.CreatePublicIpRequest{
+		CreatePublicIpDetails: core.CreatePublicIpDetails{
+			CompartmentId: &user.OciTenantID,
+			Lifetime:      core.CreatePublicIpDetailsLifetimeEphemeral,
+			PrivateIpId:   vnicResp.PrivateIp,
+		},
+	}
+	createResp, err := vnClient.CreatePublicIp(ctx, createReq)
+	if err != nil {
+		return "", fmt.Errorf("failed to create new public IP: %w", err)
+	}
+
+	if createResp.IpAddress == nil {
+		return "", fmt.Errorf("new public IP address is nil")
+	}
+
+	return *createResp.IpAddress, nil
+}
+
+// UpdateInstanceShape 更新实例配置（CPU和内存）
+func (s *OCIService) UpdateInstanceShape(ctx context.Context, user *models.OciUser, instanceId string, ocpus float32, memoryInGBs float32) error {
+	client, err := s.GetComputeClient(user)
+	if err != nil {
+		return err
+	}
+
+	// 获取当前实例信息
+	instance, err := s.GetInstance(ctx, user, instanceId)
+	if err != nil {
+		return fmt.Errorf("failed to get instance: %w", err)
+	}
+
+	// 确保实例已停止
+	if instance.LifecycleState != core.InstanceLifecycleStateStopped {
+		return fmt.Errorf("instance must be stopped before updating shape config")
+	}
+
+	req := core.UpdateInstanceRequest{
+		InstanceId: &instanceId,
+		UpdateInstanceDetails: core.UpdateInstanceDetails{
+			ShapeConfig: &core.UpdateInstanceShapeConfigDetails{
+				Ocpus:       &ocpus,
+				MemoryInGBs: &memoryInGBs,
+			},
+		},
+	}
+
+	_, err = client.UpdateInstance(ctx, req)
+	return err
+}
+
+// UpdateBootVolume 更新引导卷配置
+func (s *OCIService) UpdateBootVolume(ctx context.Context, user *models.OciUser, bootVolumeId string, sizeInGBs int64, vpusPerGB int64) error {
+	client, err := s.GetBlockstorageClient(user)
+	if err != nil {
+		return err
+	}
+
+	req := core.UpdateBootVolumeRequest{
+		BootVolumeId: &bootVolumeId,
+		UpdateBootVolumeDetails: core.UpdateBootVolumeDetails{
+			SizeInGBs: &sizeInGBs,
+			VpusPerGB: &vpusPerGB,
+		},
+	}
+
+	_, err = client.UpdateBootVolume(ctx, req)
+	return err
+}
+
+// CreateConsoleConnection 创建控制台连接
+func (s *OCIService) CreateConsoleConnection(ctx context.Context, user *models.OciUser, instanceId string, publicKey string) (string, error) {
+	client, err := s.GetComputeClient(user)
+	if err != nil {
+		return "", err
+	}
+
+	req := core.CreateInstanceConsoleConnectionRequest{
+		CreateInstanceConsoleConnectionDetails: core.CreateInstanceConsoleConnectionDetails{
+			InstanceId: &instanceId,
+			PublicKey:  &publicKey,
+		},
+	}
+
+	resp, err := client.CreateInstanceConsoleConnection(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to create console connection: %w", err)
+	}
+
+	if resp.Id == nil {
+		return "", fmt.Errorf("console connection ID is nil")
+	}
+
+	return *resp.Id, nil
+}
+
+// GetConsoleConnectionString 获取控制台连接字符串
+func (s *OCIService) GetConsoleConnectionString(ctx context.Context, user *models.OciUser, connectionId string) (string, error) {
+	client, err := s.GetComputeClient(user)
+	if err != nil {
+		return "", err
+	}
+
+	// 等待连接激活
+	var connectionString string
+	maxRetries := 30
+	for i := 0; i < maxRetries; i++ {
+		req := core.GetInstanceConsoleConnectionRequest{
+			InstanceConsoleConnectionId: &connectionId,
+		}
+		resp, err := client.GetInstanceConsoleConnection(ctx, req)
+		if err != nil {
+			return "", fmt.Errorf("failed to get console connection: %w", err)
+		}
+
+		if resp.LifecycleState == core.InstanceConsoleConnectionLifecycleStateActive {
+			if resp.ConnectionString != nil {
+				connectionString = *resp.ConnectionString
+				break
+			}
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	if connectionString == "" {
+		return "", fmt.Errorf("console connection did not become active within timeout")
+	}
+
+	return connectionString, nil
 }
 
 // GetTenantInfo 获取租户详情
@@ -732,7 +927,7 @@ func (s *OCIService) DeleteUser(ctx context.Context, user *models.OciUser, userI
 }
 
 // GetTrafficData 获取流量统计数据
-func (s *OCIService) GetTrafficData(ctx context.Context, user *models.OciUser, instanceId string, vnicId string, startTime string, endTime string) (*models.TrafficData, error) {
+func (s *OCIService) GetTrafficData(ctx context.Context, user *models.OciUser, vnicId string, startTime string, endTime string) (*models.TrafficData, error) {
 	configProvider, err := s.GetConfigProvider(user)
 	if err != nil {
 		return nil, err

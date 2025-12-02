@@ -529,52 +529,92 @@
                   </div>
                 </div>
                 <!-- 实例操作按钮 -->
-                <div class="grid grid-cols-4 gap-2">
-                  <button 
-                    @click="controlInstanceInDetails(instance.id, 'START')" 
-                    class="btn btn-success text-xs py-1.5"
-                    :disabled="instance.state === 'RUNNING' || instanceActionLoading[instance.id]"
-                    title="启动"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                    </svg>
-                    启动
-                  </button>
-                  <button 
-                    @click="controlInstanceInDetails(instance.id, 'STOP')" 
-                    class="btn btn-warning text-xs py-1.5"
-                    :disabled="instance.state !== 'RUNNING' || instanceActionLoading[instance.id]"
-                    title="停止"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-                    </svg>
-                    停止
-                  </button>
-                  <button 
-                    @click="controlInstanceInDetails(instance.id, 'SOFTRESET')" 
-                    class="btn btn-secondary text-xs py-1.5"
-                    :disabled="instance.state !== 'RUNNING' || instanceActionLoading[instance.id]"
-                    title="重启"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    重启
-                  </button>
-                  <button 
-                    @click="terminateInstanceInDetails(instance.id)" 
-                    class="btn btn-danger text-xs py-1.5"
-                    :disabled="instanceActionLoading[instance.id]"
-                    title="删除"
-                  >
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    删除
-                  </button>
+                <div class="space-y-2">
+                  <div class="grid grid-cols-4 gap-2">
+                    <button 
+                      @click="controlInstanceInDetails(instance.id, 'START')" 
+                      class="btn btn-success text-xs py-1.5"
+                      :disabled="instance.state === 'RUNNING' || instanceActionLoading[instance.id]"
+                      title="启动"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      </svg>
+                      启动
+                    </button>
+                    <button 
+                      @click="controlInstanceInDetails(instance.id, 'STOP')" 
+                      class="btn btn-warning text-xs py-1.5"
+                      :disabled="instance.state !== 'RUNNING' || instanceActionLoading[instance.id]"
+                      title="停止"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                      </svg>
+                      停止
+                    </button>
+                    <button 
+                      @click="controlInstanceInDetails(instance.id, 'SOFTRESET')" 
+                      class="btn btn-secondary text-xs py-1.5"
+                      :disabled="instance.state !== 'RUNNING' || instanceActionLoading[instance.id]"
+                      title="重启"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      重启
+                    </button>
+                    <button 
+                      @click="terminateInstanceInDetails(instance.id)" 
+                      class="btn btn-danger text-xs py-1.5"
+                      :disabled="instanceActionLoading[instance.id]"
+                      title="删除"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      删除
+                    </button>
+                  </div>
+                  
+                  <!-- 新功能按钮 -->
+                  <div class="grid grid-cols-3 gap-2">
+                    <button 
+                      @click="changeIPInDetails(instance.id)" 
+                      class="btn btn-info text-xs py-1.5"
+                      :disabled="instanceActionLoading[instance.id]"
+                      title="更改IP"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      更改IP
+                    </button>
+                    <button 
+                      @click="showEditConfigDialog(instance)" 
+                      class="btn btn-info text-xs py-1.5"
+                      :disabled="instanceActionLoading[instance.id]"
+                      title="编辑配置"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      编辑配置
+                    </button>
+                    <button 
+                      @click="showCloudShellDialog(instance.id)" 
+                      class="btn btn-info text-xs py-1.5"
+                      :disabled="instanceActionLoading[instance.id]"
+                      title="Cloud Shell"
+                    >
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      Cloud Shell
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -892,6 +932,153 @@
         </form>
       </div>
     </div>
+
+    <!-- Edit Instance Config Modal -->
+    <div v-if="editConfigDialogVisible" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="card max-w-md w-full">
+        <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+          <h3 class="text-xl font-bold">编辑实例配置</h3>
+          <button @click="editConfigDialogVisible = false" class="text-slate-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form @submit.prevent="updateInstanceConfig" class="p-6 space-y-4">
+          <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4 mb-4">
+            <p class="text-sm text-yellow-300">
+              <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+              </svg>
+              注意：修改配置需要停止实例
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">CPU核心数 (OCPUs)</label>
+            <input v-model.number="editConfigForm.ocpus" type="number" min="1" max="64" class="input" required />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">内存 (GB)</label>
+            <input v-model.number="editConfigForm.memoryInGBs" type="number" min="1" max="1024" class="input" required />
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button type="button" @click="editConfigDialogVisible = false" class="btn btn-secondary flex-1">取消</button>
+            <button type="submit" class="btn btn-primary flex-1" :disabled="configUpdating">
+              {{ configUpdating ? '更新中...' : '保存' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Cloud Shell Modal -->
+    <div v-if="cloudShellDialogVisible" class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div class="card max-w-2xl w-full">
+        <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+          <h3 class="text-xl font-bold">Cloud Shell 连接</h3>
+          <button @click="cloudShellDialogVisible = false" class="text-slate-400 hover:text-white">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+            <p class="text-sm text-blue-300">
+              <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+              </svg>
+              请提供SSH公钥以创建Cloud Shell连接
+            </p>
+          </div>
+
+          <div v-if="!cloudShellResult.connectionString">
+            <label class="block text-sm font-medium text-slate-300 mb-2">SSH 公钥</label>
+            <textarea 
+              v-model="cloudShellForm.publicKey" 
+              class="input min-h-[120px] font-mono text-xs" 
+              placeholder="ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC..." 
+              required
+            ></textarea>
+            <p class="text-xs text-slate-400 mt-2">粘贴您的 SSH 公钥（通常位于 ~/.ssh/id_rsa.pub）</p>
+          </div>
+
+          <div v-if="cloudShellResult.connectionString" class="space-y-3">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">连接ID</label>
+              <div class="flex gap-2">
+                <input 
+                  :value="cloudShellResult.connectionId" 
+                  readonly 
+                  class="input flex-1 font-mono text-xs bg-slate-700/50" 
+                />
+                <button 
+                  @click="copyToClipboard(cloudShellResult.connectionId)" 
+                  class="btn btn-secondary"
+                  title="复制"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">连接字符串</label>
+              <div class="flex gap-2">
+                <input 
+                  :value="cloudShellResult.connectionString" 
+                  readonly 
+                  class="input flex-1 font-mono text-xs bg-slate-700/50" 
+                />
+                <button 
+                  @click="copyToClipboard(cloudShellResult.connectionString)" 
+                  class="btn btn-secondary"
+                  title="复制"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+              <p class="text-sm text-green-300">
+                <svg class="w-4 h-4 inline mr-2" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                </svg>
+                连接创建成功！请使用SSH客户端连接。
+              </p>
+            </div>
+          </div>
+
+          <div class="flex gap-3 pt-4">
+            <button 
+              type="button" 
+              @click="cloudShellDialogVisible = false" 
+              class="btn btn-secondary flex-1"
+            >
+              关闭
+            </button>
+            <button 
+              v-if="!cloudShellResult.connectionString"
+              @click="createCloudShell" 
+              class="btn btn-primary flex-1" 
+              :disabled="cloudShellCreating || !cloudShellForm.publicKey.trim()"
+            >
+              {{ cloudShellCreating ? '创建中...' : '创建连接' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   </div>
 </template>
@@ -971,6 +1158,28 @@ const form = ref({
 
 const uploadedFile = ref(null)
 const isDragging = ref(false)
+
+// 编辑配置对话框
+const editConfigDialogVisible = ref(false)
+const configUpdating = ref(false)
+const editConfigForm = reactive({
+  instanceId: '',
+  displayName: '',
+  ocpus: 2,
+  memoryInGBs: 12
+})
+
+// Cloud Shell对话框
+const cloudShellDialogVisible = ref(false)
+const cloudShellCreating = ref(false)
+const cloudShellForm = reactive({
+  instanceId: '',
+  publicKey: ''
+})
+const cloudShellResult = reactive({
+  connectionId: '',
+  connectionString: ''
+})
 
 const instanceForm = ref({
   ociRegion: '',
@@ -1578,6 +1787,115 @@ const terminateInstanceInDetails = async (instanceId) => {
   } finally {
     delete instanceActionLoading[instanceId]
   }
+}
+
+// 更改IP
+const changeIPInDetails = async (instanceId) => {
+  if (!confirm('确定要更改此实例的公网IP吗？')) {
+    return
+  }
+
+  instanceActionLoading[instanceId] = true
+  try {
+    const response = await api.post('/instance/changeIP', {
+      userId: configDetails.value.userId,
+      instanceId
+    })
+    if (response.data && response.data.code === 200) {
+      toast.success(`IP更改成功，新IP: ${response.data.data.newIP}`)
+      setTimeout(() => loadInstances(true), 2000)
+    } else {
+      toast.error(response.data?.msg || 'IP更改失败')
+    }
+  } catch (error) {
+    toast.error(error.message || 'IP更改失败')
+  } finally {
+    delete instanceActionLoading[instanceId]
+  }
+}
+
+// 显示编辑配置对话框
+const showEditConfigDialog = (instance) => {
+  editConfigForm.instanceId = instance.id
+  editConfigForm.displayName = instance.displayName
+  editConfigForm.ocpus = instance.ocpus || 2
+  editConfigForm.memoryInGBs = instance.memory || 12
+  editConfigDialogVisible.value = true
+}
+
+// 更新实例配置
+const updateInstanceConfig = async () => {
+  if (!editConfigForm.instanceId) {
+    toast.warning('缺少实例ID')
+    return
+  }
+
+  configUpdating.value = true
+  try {
+    const response = await api.post('/instance/updateConfig', {
+      userId: configDetails.value.userId,
+      instanceId: editConfigForm.instanceId,
+      ocpus: editConfigForm.ocpus,
+      memoryInGBs: editConfigForm.memoryInGBs
+    })
+    if (response.data && response.data.code === 200) {
+      toast.success('实例配置更新成功')
+      editConfigDialogVisible.value = false
+      setTimeout(() => loadInstances(true), 2000)
+    } else {
+      toast.error(response.data?.msg || '实例配置更新失败')
+    }
+  } catch (error) {
+    toast.error(error.message || '实例配置更新失败')
+  } finally {
+    configUpdating.value = false
+  }
+}
+
+// 显示Cloud Shell对话框
+const showCloudShellDialog = (instanceId) => {
+  cloudShellForm.instanceId = instanceId
+  cloudShellForm.publicKey = ''
+  cloudShellResult.connectionId = ''
+  cloudShellResult.connectionString = ''
+  cloudShellDialogVisible.value = true
+}
+
+// 创建Cloud Shell连接
+const createCloudShell = async () => {
+  if (!cloudShellForm.publicKey.trim()) {
+    toast.warning('请输入SSH公钥')
+    return
+  }
+
+  cloudShellCreating.value = true
+  try {
+    const response = await api.post('/instance/createCloudShell', {
+      userId: configDetails.value.userId,
+      instanceId: cloudShellForm.instanceId,
+      publicKey: cloudShellForm.publicKey
+    })
+    if (response.data && response.data.code === 200) {
+      cloudShellResult.connectionId = response.data.data.connectionId
+      cloudShellResult.connectionString = response.data.data.connectionString
+      toast.success('Cloud Shell连接创建成功')
+    } else {
+      toast.error(response.data?.msg || 'Cloud Shell连接创建失败')
+    }
+  } catch (error) {
+    toast.error(error.message || 'Cloud Shell连接创建失败')
+  } finally {
+    cloudShellCreating.value = false
+  }
+}
+
+// 复制到剪贴板
+const copyToClipboard = (text) => {
+  navigator.clipboard.writeText(text).then(() => {
+    toast.success('已复制到剪贴板')
+  }).catch(() => {
+    toast.error('复制失败')
+  })
 }
 
 const viewInstances = async (config) => {

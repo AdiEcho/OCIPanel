@@ -77,6 +77,10 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 			instance.POST("/reboot", instanceCtrl.RebootInstance)
 			instance.POST("/terminate", instanceCtrl.TerminateInstance)
 			instance.POST("/updateName", instanceCtrl.UpdateInstanceName)
+			instance.POST("/changeIP", instanceCtrl.ChangePublicIP)
+			instance.POST("/updateConfig", instanceCtrl.UpdateInstanceConfig)
+			instance.POST("/updateBootVolume", instanceCtrl.UpdateBootVolume)
+			instance.POST("/createCloudShell", instanceCtrl.CreateCloudShell)
 		}
 
 		ipCtrl := controllers.NewIpController(ipService)
