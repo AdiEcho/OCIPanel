@@ -36,6 +36,59 @@
 
     <div class="card">
       <div class="p-6 border-b border-slate-700">
+        <h2 class="text-xl font-semibold">缓存设置</h2>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="flex justify-between items-center py-3 border-b border-slate-700">
+          <div>
+            <span class="text-slate-300">启用数据缓存</span>
+            <p class="text-sm text-slate-500 mt-1">启用后将定时缓存配置的实例数据到数据库，减少对OCI API的请求</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" v-model="cacheConfig.cacheEnabled" class="sr-only peer" @change="updateCacheConfig">
+            <div class="w-11 h-6 bg-slate-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-500"></div>
+          </label>
+        </div>
+        <div class="flex justify-between items-center py-3 border-b border-slate-700">
+          <div>
+            <span class="text-slate-300">缓存刷新间隔</span>
+            <p class="text-sm text-slate-500 mt-1">定时任务检查并更新缓存的间隔时间（分钟）</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input 
+              type="number" 
+              v-model.number="cacheConfig.cacheInterval" 
+              min="5" 
+              max="1440"
+              class="w-20 px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white text-center"
+              :disabled="!cacheConfig.cacheEnabled"
+              @change="updateCacheConfig"
+            >
+            <span class="text-slate-400">分钟</span>
+          </div>
+        </div>
+        <div class="flex justify-between items-center py-3">
+          <div>
+            <span class="text-slate-300">手动刷新缓存</span>
+            <p class="text-sm text-slate-500 mt-1">立即更新所有配置的缓存数据</p>
+          </div>
+          <button 
+            @click="refreshCache" 
+            :disabled="!cacheConfig.cacheEnabled || refreshing"
+            class="btn btn-primary"
+          >
+            <svg v-if="refreshing" class="animate-spin h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ refreshing ? '刷新中...' : '立即刷新' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="p-6 border-b border-slate-700">
         <h2 class="text-xl font-semibold">系统配置</h2>
       </div>
       <div class="p-6 space-y-4">
@@ -106,10 +159,15 @@ import api from '../utils/api'
 import { toast } from '../utils/toast'
 
 const loading = ref(false)
+const refreshing = ref(false)
 const config = ref({
   keyDirPath: '',
   logLevel: '',
   aiEnabled: false
+})
+const cacheConfig = ref({
+  cacheEnabled: false,
+  cacheInterval: 30
 })
 
 const loadConfig = async () => {
@@ -118,12 +176,40 @@ const loadConfig = async () => {
     const response = await api.post('/sys/getSysCfg', {})
     if (response.data) {
       config.value = response.data
+      cacheConfig.value.cacheEnabled = response.data.cacheEnabled || false
+      cacheConfig.value.cacheInterval = response.data.cacheInterval || 30
     }
   } catch (error) {
     console.error('加载配置失败:', error)
     toast.error('加载系统配置失败')
   } finally {
     loading.value = false
+  }
+}
+
+const updateCacheConfig = async () => {
+  try {
+    await api.post('/sys/updateCacheCfg', {
+      cacheEnabled: cacheConfig.value.cacheEnabled,
+      cacheInterval: cacheConfig.value.cacheInterval
+    })
+    toast.success('缓存配置已更新')
+  } catch (error) {
+    console.error('更新缓存配置失败:', error)
+    toast.error('更新缓存配置失败')
+  }
+}
+
+const refreshCache = async () => {
+  refreshing.value = true
+  try {
+    await api.post('/sys/refreshCache', {})
+    toast.success('缓存刷新任务已启动')
+  } catch (error) {
+    console.error('刷新缓存失败:', error)
+    toast.error('刷新缓存失败')
+  } finally {
+    refreshing.value = false
   }
 }
 

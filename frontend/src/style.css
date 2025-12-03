@@ -33,6 +33,10 @@
     @apply bg-yellow-600 hover:bg-yellow-700 text-white;
   }
   
+  .btn-info {
+    @apply bg-cyan-600 hover:bg-cyan-700 text-white;
+  }
+  
   .card {
     @apply bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-xl shadow-xl;
   }

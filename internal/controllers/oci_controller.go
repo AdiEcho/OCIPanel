@@ -2,12 +2,14 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/adiecho/oci-panel/internal/database"
 	"github.com/adiecho/oci-panel/internal/models"
 	"github.com/adiecho/oci-panel/internal/services"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/oracle/oci-go-sdk/v65/core"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,14 +17,14 @@ import (
 )
 
 type OciController struct {
-	ociService   *services.OCIService
-	cacheService *services.CacheService
+	ociService       *services.OCIService
+	schedulerService *services.SchedulerService
 }
 
-func NewOciController(ociService *services.OCIService, cacheService *services.CacheService) *OciController {
+func NewOciController(ociService *services.OCIService, schedulerService *services.SchedulerService) *OciController {
 	return &OciController{
-		ociService:   ociService,
-		cacheService: cacheService,
+		ociService:       ociService,
+		schedulerService: schedulerService,
 	}
 }
 
@@ -59,19 +61,72 @@ func (oc *OciController) UserPage(c *gin.Context) {
 	offset := (req.Page - 1) * req.PageSize
 	query.Order("create_time DESC").Limit(req.PageSize).Offset(offset).Find(&users)
 
-	// 转换为增强的响应格式
 	responseList := make([]models.OciUserListResponse, len(users))
-	for i, user := range users {
-		responseList[i] = models.OciUserListResponse{
-			ID:          user.ID,
-			Username:    user.Username,
-			TenantName:  user.TenantName,
-			OciTenantID: user.OciTenantID,
-			OciRegion:   user.OciRegion,
-			CreateTime:  user.CreateTime.Format("2006-01-02 15:04:05"),
-			// 实例数量暂时设为0，后续可以通过异步获取
-			InstanceCount:    0,
-			RunningInstances: 0,
+	cacheEnabled := oc.schedulerService.IsCacheEnabled()
+
+	if cacheEnabled {
+		// 从数据库缓存读取
+		for i, user := range users {
+			responseList[i] = models.OciUserListResponse{
+				ID:               user.ID,
+				Username:         user.Username,
+				TenantName:       user.TenantName,
+				OciTenantID:      user.OciTenantID,
+				OciRegion:        user.OciRegion,
+				CreateTime:       user.CreateTime.Format("2006-01-02 15:04:05"),
+				InstanceCount:    0,
+				RunningInstances: 0,
+			}
+
+			cache, err := oc.schedulerService.GetConfigCache(user.ID)
+			if err == nil {
+				responseList[i].InstanceCount = cache.InstanceCount
+				responseList[i].RunningInstances = cache.RunningInstances
+			}
+		}
+	} else {
+		// 实时获取（并发）
+		type instanceCountResult struct {
+			index            int
+			instanceCount    int
+			runningInstances int
+		}
+		resultChan := make(chan instanceCountResult, len(users))
+
+		ctx := context.Background()
+		for i, user := range users {
+			go func(idx int, u models.OciUser) {
+				result := instanceCountResult{index: idx}
+				instances, err := oc.ociService.ListInstances(ctx, &u, u.OciTenantID)
+				if err == nil {
+					result.instanceCount = len(instances)
+					for _, inst := range instances {
+						if inst.LifecycleState == core.InstanceLifecycleStateRunning {
+							result.runningInstances++
+						}
+					}
+				}
+				resultChan <- result
+			}(i, user)
+		}
+
+		for i, user := range users {
+			responseList[i] = models.OciUserListResponse{
+				ID:               user.ID,
+				Username:         user.Username,
+				TenantName:       user.TenantName,
+				OciTenantID:      user.OciTenantID,
+				OciRegion:        user.OciRegion,
+				CreateTime:       user.CreateTime.Format("2006-01-02 15:04:05"),
+				InstanceCount:    0,
+				RunningInstances: 0,
+			}
+		}
+
+		for i := 0; i < len(users); i++ {
+			result := <-resultChan
+			responseList[result.index].InstanceCount = result.instanceCount
+			responseList[result.index].RunningInstances = result.runningInstances
 		}
 	}
 
@@ -333,7 +388,7 @@ type GetResourceRequest struct {
 	ClearCache bool   `json:"clearCache"`
 }
 
-// GetConfigInstances 获取配置的实例列表（带缓存）
+// GetConfigInstances 获取配置的实例列表
 func (oc *OciController) GetConfigInstances(c *gin.Context) {
 	var req GetResourceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -341,19 +396,24 @@ func (oc *OciController) GetConfigInstances(c *gin.Context) {
 		return
 	}
 
-	cacheKey := services.CacheKeyInstances + req.ConfigID
-
-	// 如果需要清除缓存
+	// 如果需要刷新缓存，先更新
 	if req.ClearCache {
-		oc.cacheService.Delete(cacheKey)
+		oc.schedulerService.UpdateConfigCache(req.ConfigID)
 	}
 
-	// 尝试从缓存获取
-	if cached, found := oc.cacheService.Get(cacheKey); found {
-		c.JSON(http.StatusOK, models.SuccessResponse(cached, "Success (cached)"))
-		return
+	// 尝试从数据库缓存获取
+	if oc.schedulerService.IsCacheEnabled() {
+		cache, err := oc.schedulerService.GetConfigCache(req.ConfigID)
+		if err == nil && cache.InstancesData != "" {
+			var instances []models.InstanceInfo
+			if json.Unmarshal([]byte(cache.InstancesData), &instances) == nil {
+				c.JSON(http.StatusOK, models.SuccessResponse(instances, "Success (cached)"))
+				return
+			}
+		}
 	}
 
+	// 实时获取
 	db := database.GetDB()
 	var user models.OciUser
 	if err := db.Where("id = ?", req.ConfigID).First(&user).Error; err != nil {
@@ -377,13 +437,10 @@ func (oc *OciController) GetConfigInstances(c *gin.Context) {
 		}
 	}
 
-	// 缓存10分钟
-	oc.cacheService.Set(cacheKey, instances, 600)
-
 	c.JSON(http.StatusOK, models.SuccessResponse(instances, "Success"))
 }
 
-// GetConfigVolumes 获取配置的存储卷列表（带缓存）
+// GetConfigVolumes 获取配置的存储卷列表
 func (oc *OciController) GetConfigVolumes(c *gin.Context) {
 	var req GetResourceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -391,17 +448,23 @@ func (oc *OciController) GetConfigVolumes(c *gin.Context) {
 		return
 	}
 
-	cacheKey := services.CacheKeyVolumes + req.ConfigID
-
 	if req.ClearCache {
-		oc.cacheService.Delete(cacheKey)
+		oc.schedulerService.UpdateConfigCache(req.ConfigID)
 	}
 
-	if cached, found := oc.cacheService.Get(cacheKey); found {
-		c.JSON(http.StatusOK, models.SuccessResponse(cached, "Success (cached)"))
-		return
+	// 尝试从数据库缓存获取
+	if oc.schedulerService.IsCacheEnabled() {
+		cache, err := oc.schedulerService.GetConfigCache(req.ConfigID)
+		if err == nil && cache.VolumesData != "" {
+			var volumes []models.VolumeInfo
+			if json.Unmarshal([]byte(cache.VolumesData), &volumes) == nil {
+				c.JSON(http.StatusOK, models.SuccessResponse(volumes, "Success (cached)"))
+				return
+			}
+		}
 	}
 
+	// 实时获取
 	db := database.GetDB()
 	var user models.OciUser
 	if err := db.Where("id = ?", req.ConfigID).First(&user).Error; err != nil {
@@ -418,12 +481,10 @@ func (oc *OciController) GetConfigVolumes(c *gin.Context) {
 		return
 	}
 
-	oc.cacheService.Set(cacheKey, volumes, 600)
-
 	c.JSON(http.StatusOK, models.SuccessResponse(volumes, "Success"))
 }
 
-// GetConfigVCNs 获取配置的VCN列表（带缓存）
+// GetConfigVCNs 获取配置的VCN列表
 func (oc *OciController) GetConfigVCNs(c *gin.Context) {
 	var req GetResourceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -431,17 +492,23 @@ func (oc *OciController) GetConfigVCNs(c *gin.Context) {
 		return
 	}
 
-	cacheKey := services.CacheKeyVCNs + req.ConfigID
-
 	if req.ClearCache {
-		oc.cacheService.Delete(cacheKey)
+		oc.schedulerService.UpdateConfigCache(req.ConfigID)
 	}
 
-	if cached, found := oc.cacheService.Get(cacheKey); found {
-		c.JSON(http.StatusOK, models.SuccessResponse(cached, "Success (cached)"))
-		return
+	// 尝试从数据库缓存获取
+	if oc.schedulerService.IsCacheEnabled() {
+		cache, err := oc.schedulerService.GetConfigCache(req.ConfigID)
+		if err == nil && cache.VcnsData != "" {
+			var vcns []models.VCNInfo
+			if json.Unmarshal([]byte(cache.VcnsData), &vcns) == nil {
+				c.JSON(http.StatusOK, models.SuccessResponse(vcns, "Success (cached)"))
+				return
+			}
+		}
 	}
 
+	// 实时获取
 	db := database.GetDB()
 	var user models.OciUser
 	if err := db.Where("id = ?", req.ConfigID).First(&user).Error; err != nil {
@@ -458,12 +525,10 @@ func (oc *OciController) GetConfigVCNs(c *gin.Context) {
 		return
 	}
 
-	oc.cacheService.Set(cacheKey, vcns, 600)
-
 	c.JSON(http.StatusOK, models.SuccessResponse(vcns, "Success"))
 }
 
-// ClearConfigCache 清除配置的所有缓存
+// ClearConfigCache 刷新配置的缓存
 func (oc *OciController) ClearConfigCache(c *gin.Context) {
 	var req GetConfigDetailsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -471,15 +536,13 @@ func (oc *OciController) ClearConfigCache(c *gin.Context) {
 		return
 	}
 
-	oc.cacheService.Delete(services.CacheKeyInstances + req.ConfigID)
-	oc.cacheService.Delete(services.CacheKeyVolumes + req.ConfigID)
-	oc.cacheService.Delete(services.CacheKeyVCNs + req.ConfigID)
-	oc.cacheService.Delete(services.CacheKeyTenant + req.ConfigID)
+	// 重新获取并更新缓存
+	go oc.schedulerService.UpdateConfigCache(req.ConfigID)
 
-	c.JSON(http.StatusOK, models.SuccessResponse(nil, "Cache cleared"))
+	c.JSON(http.StatusOK, models.SuccessResponse(nil, "Cache refresh started"))
 }
 
-// GetTenantInfo 获取租户详情（带缓存）
+// GetTenantInfo 获取租户详情
 func (oc *OciController) GetTenantInfo(c *gin.Context) {
 	var req GetResourceRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -487,17 +550,23 @@ func (oc *OciController) GetTenantInfo(c *gin.Context) {
 		return
 	}
 
-	cacheKey := services.CacheKeyTenant + req.ConfigID
-
 	if req.ClearCache {
-		oc.cacheService.Delete(cacheKey)
+		oc.schedulerService.UpdateConfigCache(req.ConfigID)
 	}
 
-	if cached, found := oc.cacheService.Get(cacheKey); found {
-		c.JSON(http.StatusOK, models.SuccessResponse(cached, "Success (cached)"))
-		return
+	// 尝试从数据库缓存获取
+	if oc.schedulerService.IsCacheEnabled() {
+		cache, err := oc.schedulerService.GetConfigCache(req.ConfigID)
+		if err == nil && cache.TenantData != "" {
+			var tenantInfo models.TenantInfo
+			if json.Unmarshal([]byte(cache.TenantData), &tenantInfo) == nil {
+				c.JSON(http.StatusOK, models.SuccessResponse(tenantInfo, "Success (cached)"))
+				return
+			}
+		}
 	}
 
+	// 实时获取
 	db := database.GetDB()
 	var user models.OciUser
 	if err := db.Where("id = ?", req.ConfigID).First(&user).Error; err != nil {
@@ -511,9 +580,6 @@ func (oc *OciController) GetTenantInfo(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
 		return
 	}
-
-	// 缓存30分钟（租户信息变化较少）
-	oc.cacheService.Set(cacheKey, tenantInfo, 1800)
 
 	c.JSON(http.StatusOK, models.SuccessResponse(tenantInfo, "Success"))
 }
@@ -640,8 +706,8 @@ func (oc *OciController) UpdatePasswordExpiry(c *gin.Context) {
 		return
 	}
 
-	// 清除租户信息缓存，下次查询时会重新获取
-	oc.cacheService.Delete(services.CacheKeyTenant + req.CfgID)
+	// 更新缓存
+	go oc.schedulerService.UpdateConfigCache(req.CfgID)
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "密码过期策略已更新"))
 }
@@ -668,7 +734,7 @@ func (oc *OciController) UpdateUserInfo(c *gin.Context) {
 		return
 	}
 
-	oc.cacheService.Delete(services.CacheKeyTenant + req.OciCfgID)
+	go oc.schedulerService.UpdateConfigCache(req.OciCfgID)
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "用户信息更新成功"))
 }
@@ -695,8 +761,7 @@ func (oc *OciController) DeleteUser(c *gin.Context) {
 		return
 	}
 
-	// 清除租户信息缓存
-	oc.cacheService.Delete(services.CacheKeyTenant + req.OciCfgID)
+	go oc.schedulerService.UpdateConfigCache(req.OciCfgID)
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "用户删除成功"))
 }
@@ -748,7 +813,7 @@ func (oc *OciController) DeleteMfaDevice(c *gin.Context) {
 		return
 	}
 
-	oc.cacheService.Delete(services.CacheKeyTenant + req.OciCfgID)
+	go oc.schedulerService.UpdateConfigCache(req.OciCfgID)
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "MFA设备清除成功"))
 }

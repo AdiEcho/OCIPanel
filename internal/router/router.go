@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func Setup(r *gin.Engine, cfg *config.Config) {
+func Setup(r *gin.Engine, cfg *config.Config) *services.SchedulerService {
 	r.Use(middleware.CORS())
 	r.Use(middleware.AuthMiddleware())
 
@@ -22,26 +22,28 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	})
 
 	ociService := services.NewOCIService(cfg)
-	cacheService := services.NewCacheService()
 	instanceService := services.NewInstanceService(ociService)
 	ipService := services.NewIpService(ociService)
 	_ = services.NewVolumeService(ociService)
 	wsService := services.NewWebSocketService()
+	schedulerService := services.NewSchedulerService(ociService)
 
 	wsCtrl := controllers.NewWebSocketController(wsService)
 	r.GET("/ws/logs", wsCtrl.HandleWebSocket)
 
 	api := r.Group("/api")
 	{
-		sysCtrl := controllers.NewSysController(cfg)
+		sysCtrl := controllers.NewSysController(cfg, schedulerService)
 		sys := api.Group("/sys")
 		{
 			sys.POST("/login", sysCtrl.Login)
 			sys.POST("/getGlance", sysCtrl.GetGlance)
 			sys.POST("/getSysCfg", sysCtrl.GetSysCfg)
+			sys.POST("/updateCacheCfg", sysCtrl.UpdateCacheCfg)
+			sys.POST("/refreshCache", sysCtrl.RefreshCache)
 		}
 
-		ociCtrl := controllers.NewOciController(ociService, cacheService)
+		ociCtrl := controllers.NewOciController(ociService, schedulerService)
 		oci := api.Group("/oci")
 		{
 			oci.POST("/userPage", ociCtrl.UserPage)
@@ -95,4 +97,6 @@ func Setup(r *gin.Engine, cfg *config.Config) {
 	r.NoRoute(func(c *gin.Context) {
 		c.File("./frontend/dist/index.html")
 	})
+
+	return schedulerService
 }

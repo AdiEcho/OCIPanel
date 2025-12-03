@@ -215,6 +215,34 @@ func (IpData) TableName() string {
 	return "ip_data"
 }
 
+// SysSetting 系统设置表
+type SysSetting struct {
+	ID    string `gorm:"primaryKey;column:id" json:"id"`
+	Key   string `gorm:"column:key;uniqueIndex;not null" json:"key"`
+	Value string `gorm:"column:value;type:text" json:"value"`
+}
+
+func (SysSetting) TableName() string {
+	return "sys_setting"
+}
+
+// OciConfigCache 配置缓存表
+type OciConfigCache struct {
+	ID               string    `gorm:"primaryKey;column:id" json:"id"`
+	ConfigID         string    `gorm:"column:config_id;uniqueIndex;not null" json:"configId"`
+	InstanceCount    int       `gorm:"column:instance_count;default:0" json:"instanceCount"`
+	RunningInstances int       `gorm:"column:running_instances;default:0" json:"runningInstances"`
+	InstancesData    string    `gorm:"column:instances_data;type:text" json:"instancesData"`
+	VolumesData      string    `gorm:"column:volumes_data;type:text" json:"volumesData"`
+	VcnsData         string    `gorm:"column:vcns_data;type:text" json:"vcnsData"`
+	TenantData       string    `gorm:"column:tenant_data;type:text" json:"tenantData"`
+	UpdateTime       time.Time `gorm:"column:update_time" json:"updateTime"`
+}
+
+func (OciConfigCache) TableName() string {
+	return "oci_config_cache"
+}
+
 type ResponseData struct {
 	Code    int         `json:"code"`
 	Message string      `json:"message"`
@@ -246,5 +274,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&OciKv{},
 		&CfCfg{},
 		&IpData{},
+		&SysSetting{},
+		&OciConfigCache{},
 	)
 }
