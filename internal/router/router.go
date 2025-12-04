@@ -68,6 +68,10 @@ func Setup(r *gin.Engine, cfg *config.Config) *services.SchedulerService {
 			oci.POST("/traffic/data", ociCtrl.GetTrafficData)
 			oci.GET("/traffic/condition", ociCtrl.GetTrafficCondition)
 			oci.GET("/traffic/vnics", ociCtrl.GetInstanceVnics)
+			oci.POST("/vcn/securityList", ociCtrl.GetSecurityList)
+			oci.POST("/vcn/addSecurityRule", ociCtrl.AddSecurityRule)
+			oci.POST("/vcn/releaseSecurityRules", ociCtrl.ReleaseSecurityRules)
+			oci.POST("/vcn/delete", ociCtrl.DeleteVcn)
 		}
 
 		instanceCtrl := controllers.NewInstanceController(instanceService)

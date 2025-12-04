@@ -913,6 +913,41 @@
                         </div>
                       </div>
                     </div>
+                    <!-- VCN操作按钮 -->
+                    <div class="flex gap-2 mt-3 pt-3 border-t border-slate-600">
+                      <button 
+                        class="btn btn-primary btn-sm" 
+                        @click="viewSecurityList(vcn)"
+                        title="查看安全列表"
+                      >
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        安全列表
+                      </button>
+                      <button 
+                        class="btn btn-success btn-sm" 
+                        @click="releaseVcnRules(vcn)"
+                        :disabled="vcnActionLoading[vcn.id]"
+                        title="一键放行所有端口"
+                      >
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                        </svg>
+                        {{ vcnActionLoading[vcn.id] ? '处理中...' : '放行规则' }}
+                      </button>
+                      <button 
+                        class="btn btn-danger btn-sm" 
+                        @click="deleteVcn(vcn)"
+                        :disabled="vcnActionLoading[vcn.id]"
+                        title="删除VCN"
+                      >
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        删除
+                      </button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1562,6 +1597,202 @@
         </div>
       </div>
     </div>
+
+    <!-- 安全列表弹窗 -->
+    <div
+      v-if="securityListDialogVisible"
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    >
+      <div class="card max-w-4xl w-full max-h-[90vh] flex flex-col">
+        <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+          <h3 class="text-xl font-bold">安全列表 - {{ currentSecurityList?.displayName }}</h3>
+          <button class="text-slate-400 hover:text-white" @click="securityListDialogVisible = false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 overflow-y-auto flex-1">
+          <div v-if="loadingSecurityList" class="text-center py-8">
+            <svg class="animate-spin h-8 w-8 mx-auto text-blue-500" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <p class="text-slate-400 mt-2">加载中...</p>
+          </div>
+
+          <div v-else-if="currentSecurityList">
+            <!-- 入站规则 -->
+            <div class="mb-6">
+              <div class="flex justify-between items-center mb-3">
+                <h4 class="text-lg font-semibold text-green-400">入站规则 (Ingress)</h4>
+                <button class="btn btn-primary btn-sm" @click="showAddRuleForm('ingress')">
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  添加规则
+                </button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-700/50">
+                    <tr>
+                      <th class="px-3 py-2 text-left text-slate-300">协议</th>
+                      <th class="px-3 py-2 text-left text-slate-300">来源</th>
+                      <th class="px-3 py-2 text-left text-slate-300">端口</th>
+                      <th class="px-3 py-2 text-left text-slate-300">描述</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-700">
+                    <tr v-for="(rule, index) in currentSecurityList.ingressRules" :key="'in-' + index" class="hover:bg-slate-700/30">
+                      <td class="px-3 py-2 text-white">{{ rule.protocolName }}</td>
+                      <td class="px-3 py-2 text-white font-mono text-xs">{{ rule.source }}</td>
+                      <td class="px-3 py-2 text-white">
+                        {{ formatPortRange(rule) }}
+                      </td>
+                      <td class="px-3 py-2 text-slate-400">{{ rule.description || '-' }}</td>
+                    </tr>
+                    <tr v-if="!currentSecurityList.ingressRules?.length">
+                      <td colspan="4" class="px-3 py-4 text-center text-slate-400">暂无入站规则</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 出站规则 -->
+            <div>
+              <div class="flex justify-between items-center mb-3">
+                <h4 class="text-lg font-semibold text-blue-400">出站规则 (Egress)</h4>
+                <button class="btn btn-primary btn-sm" @click="showAddRuleForm('egress')">
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                  </svg>
+                  添加规则
+                </button>
+              </div>
+              <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                  <thead class="bg-slate-700/50">
+                    <tr>
+                      <th class="px-3 py-2 text-left text-slate-300">协议</th>
+                      <th class="px-3 py-2 text-left text-slate-300">目标</th>
+                      <th class="px-3 py-2 text-left text-slate-300">端口</th>
+                      <th class="px-3 py-2 text-left text-slate-300">描述</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-700">
+                    <tr v-for="(rule, index) in currentSecurityList.egressRules" :key="'out-' + index" class="hover:bg-slate-700/30">
+                      <td class="px-3 py-2 text-white">{{ rule.protocolName }}</td>
+                      <td class="px-3 py-2 text-white font-mono text-xs">{{ rule.destination }}</td>
+                      <td class="px-3 py-2 text-white">
+                        {{ formatPortRange(rule) }}
+                      </td>
+                      <td class="px-3 py-2 text-slate-400">{{ rule.description || '-' }}</td>
+                    </tr>
+                    <tr v-if="!currentSecurityList.egressRules?.length">
+                      <td colspan="4" class="px-3 py-4 text-center text-slate-400">暂无出站规则</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6 border-t border-slate-700 flex justify-end">
+          <button class="btn btn-secondary" @click="securityListDialogVisible = false">关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 添加安全规则弹窗 -->
+    <div
+      v-if="addRuleDialogVisible"
+      class="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    >
+      <div class="card max-w-lg w-full">
+        <div class="p-6 border-b border-slate-700 flex justify-between items-center">
+          <h3 class="text-xl font-bold">添加{{ addRuleForm.isIngress ? '入站' : '出站' }}规则</h3>
+          <button class="text-slate-400 hover:text-white" @click="addRuleDialogVisible = false">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">协议</label>
+            <select v-model="addRuleForm.protocol" class="input">
+              <option value="all">所有协议</option>
+              <option value="6">TCP</option>
+              <option value="17">UDP</option>
+              <option value="1">ICMP</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              {{ addRuleForm.isIngress ? '来源 CIDR' : '目标 CIDR' }}
+            </label>
+            <input 
+              v-model="addRuleForm.cidr" 
+              type="text" 
+              class="input" 
+              placeholder="0.0.0.0/0 或 ::/0"
+            />
+          </div>
+
+          <div v-if="['6', '17'].includes(addRuleForm.protocol)" class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">端口范围(最小)</label>
+              <input 
+                v-model.number="addRuleForm.portMin" 
+                type="number" 
+                class="input" 
+                placeholder="1"
+                min="1"
+                max="65535"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">端口范围(最大)</label>
+              <input 
+                v-model.number="addRuleForm.portMax" 
+                type="number" 
+                class="input" 
+                placeholder="65535"
+                min="1"
+                max="65535"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">描述(可选)</label>
+            <input 
+              v-model="addRuleForm.description" 
+              type="text" 
+              class="input" 
+              placeholder="规则描述"
+            />
+          </div>
+
+          <div class="flex gap-3 pt-2">
+            <button class="btn btn-secondary flex-1" @click="addRuleDialogVisible = false">取消</button>
+            <button 
+              class="btn btn-primary flex-1" 
+              :disabled="addingRule"
+              @click="submitAddRule"
+            >
+              {{ addingRule ? '添加中...' : '添加规则' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1586,6 +1817,8 @@ const showEditUserModal = ref(false)
 const editConfigDialogVisible = ref(false)
 const cloudShellDialogVisible = ref(false)
 const volumeEditDialogVisible = ref(false)
+const securityListDialogVisible = ref(false)
+const addRuleDialogVisible = ref(false)
 
 // 编辑状态
 const editingConfig = ref(null)
@@ -1603,6 +1836,9 @@ const configUpdating = ref(false)
 const cloudShellCreating = ref(false)
 const volumeUpdating = ref(false)
 const instanceActionLoading = reactive({})
+const loadingSecurityList = ref(false)
+const addingRule = ref(false)
+const vcnActionLoading = reactive({})
 
 // 标签页状态
 const activeTab = ref('basic')
@@ -1675,6 +1911,18 @@ const volumeEditForm = reactive({
   vpusPerGB: 10,
   originalSize: 50,
   originalVpu: 10
+})
+
+// VCN 安全列表相关
+const currentVcnForSecurity = ref(null)
+const currentSecurityList = ref(null)
+const addRuleForm = reactive({
+  isIngress: true,
+  protocol: '6',
+  cidr: '0.0.0.0/0',
+  portMin: 1,
+  portMax: 65535,
+  description: ''
 })
 
 // 工具函数
@@ -2479,6 +2727,122 @@ const createCloudShell = async () => {
     toast.error(error.message || 'Cloud Shell连接创建失败')
   } finally {
     cloudShellCreating.value = false
+  }
+}
+
+// VCN 安全列表相关方法
+const formatPortRange = (rule) => {
+  if (rule.protocolName === '所有协议' || rule.protocolName === 'all') {
+    return '所有'
+  }
+  if (rule.protocolName === 'ICMP' || rule.protocolName === 'ICMPv6') {
+    if (rule.icmpType !== undefined) {
+      return `Type: ${rule.icmpType}${rule.icmpCode !== undefined ? ', Code: ' + rule.icmpCode : ''}`
+    }
+    return '所有'
+  }
+  if (rule.portMin && rule.portMax) {
+    if (rule.portMin === rule.portMax) {
+      return rule.portMin
+    }
+    return `${rule.portMin}-${rule.portMax}`
+  }
+  return '所有'
+}
+
+const viewSecurityList = async (vcn) => {
+  currentVcnForSecurity.value = vcn
+  currentSecurityList.value = null
+  securityListDialogVisible.value = true
+  loadingSecurityList.value = true
+  
+  try {
+    const response = await api.post('/oci/vcn/securityList', {
+      configId: configDetails.value.userId,
+      vcnId: vcn.id
+    })
+    currentSecurityList.value = response.data
+  } catch (error) {
+    toast.error(error.message || '获取安全列表失败')
+  } finally {
+    loadingSecurityList.value = false
+  }
+}
+
+const showAddRuleForm = (type) => {
+  addRuleForm.isIngress = type === 'ingress'
+  addRuleForm.protocol = '6'
+  addRuleForm.cidr = '0.0.0.0/0'
+  addRuleForm.portMin = 1
+  addRuleForm.portMax = 65535
+  addRuleForm.description = ''
+  addRuleDialogVisible.value = true
+}
+
+const submitAddRule = async () => {
+  if (!addRuleForm.cidr) {
+    toast.warning('请输入CIDR地址')
+    return
+  }
+  addingRule.value = true
+  try {
+    const params = {
+      configId: configDetails.value.userId,
+      vcnId: currentVcnForSecurity.value.id,
+      isIngress: addRuleForm.isIngress,
+      protocol: addRuleForm.protocol,
+      portMin: addRuleForm.protocol === '6' || addRuleForm.protocol === '17' ? addRuleForm.portMin : undefined,
+      portMax: addRuleForm.protocol === '6' || addRuleForm.protocol === '17' ? addRuleForm.portMax : undefined,
+      description: addRuleForm.description || undefined
+    }
+    if (addRuleForm.isIngress) {
+      params.source = addRuleForm.cidr
+    } else {
+      params.destination = addRuleForm.cidr
+    }
+    await api.post('/oci/vcn/addSecurityRule', params)
+    toast.success('安全规则添加成功')
+    addRuleDialogVisible.value = false
+    viewSecurityList(currentVcnForSecurity.value)
+  } catch (error) {
+    toast.error(error.message || '添加安全规则失败')
+  } finally {
+    addingRule.value = false
+  }
+}
+
+const releaseVcnRules = async (vcn) => {
+  if (!confirm('确定要放行所有规则吗？这将允许所有入站和出站流量。')) return
+  
+  vcnActionLoading[vcn.id] = true
+  try {
+    await api.post('/oci/vcn/releaseSecurityRules', {
+      configId: configDetails.value.userId,
+      vcnId: vcn.id
+    })
+    toast.success('安全规则已放行')
+  } catch (error) {
+    toast.error(error.message || '放行安全规则失败')
+  } finally {
+    vcnActionLoading[vcn.id] = false
+  }
+}
+
+const deleteVcn = async (vcn) => {
+  if (!confirm(`确定要删除VCN "${vcn.displayName}" 吗？此操作将删除VCN及其所有子网、网关等资源，且不可恢复！`)) return
+  
+  vcnActionLoading[vcn.id] = true
+  try {
+    await api.post('/oci/vcn/delete', {
+      configId: configDetails.value.userId,
+      vcnId: vcn.id
+    })
+    toast.success('VCN删除成功')
+    loadTabData('vcns')
+  } catch (error) {
+    toast.error(error.message || '删除VCN失败')
+  } finally {
+    vcnActionLoading[vcn.id] = false
   }
 }
 

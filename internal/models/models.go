@@ -108,6 +108,29 @@ type SubnetInfo struct {
 	IsPublic           bool   `json:"isPublic"`
 }
 
+// SecurityListInfo 安全列表信息
+type SecurityListInfo struct {
+	ID           string         `json:"id"`
+	DisplayName  string         `json:"displayName"`
+	VcnId        string         `json:"vcnId"`
+	IngressRules []SecurityRule `json:"ingressRules"`
+	EgressRules  []SecurityRule `json:"egressRules"`
+}
+
+// SecurityRule 安全规则
+type SecurityRule struct {
+	IsStateless  bool   `json:"isStateless"`
+	Protocol     string `json:"protocol"`
+	ProtocolName string `json:"protocolName"`
+	Source       string `json:"source"`
+	Destination  string `json:"destination"`
+	PortRangeMin int    `json:"portRangeMin"`
+	PortRangeMax int    `json:"portRangeMax"`
+	IcmpType     *int   `json:"icmpType"`
+	IcmpCode     *int   `json:"icmpCode"`
+	Description  string `json:"description"`
+}
+
 // TenantInfo 租户详情
 type TenantInfo struct {
 	ID                   string           `json:"id"`
