@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"sync"
 	"time"
 
@@ -11,6 +12,21 @@ import (
 	"github.com/adiecho/oci-panel/internal/models"
 	"github.com/google/uuid"
 )
+
+// extractOCIErrorMessage 从 OCI 错误中提取 Message 部分
+func extractOCIErrorMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	errStr := err.Error()
+	// 尝试提取 "Message: xxx." 部分
+	re := regexp.MustCompile(`Message:\s*([^.]+)`)
+	matches := re.FindStringSubmatch(errStr)
+	if len(matches) > 1 && matches[1] != "" {
+		return matches[1]
+	}
+	return errStr
+}
 
 type TaskService struct {
 	ociService *OCIService
@@ -119,15 +135,16 @@ func (s *TaskService) executeTask(taskID string) {
 
 	ctx := context.Background()
 	err := s.ociService.CreateInstance(ctx, &user, task.OciRegion, task.Architecture, task.OperationSystem,
-		task.Ocpus, task.Memory, task.Disk, sshKey.PublicKey, task.ImageId)
+		task.Ocpus, task.Memory, task.Disk, task.BootVolumeVpu, sshKey.PublicKey, task.ImageId)
 
 	now := time.Now()
 	task.ExecuteCount++
 	task.LastExecuteTime = &now
 
 	if err != nil {
-		task.LastMessage = fmt.Sprintf("创建失败: %v", err)
-		s.logTaskExecution(taskID, "error", task.LastMessage)
+		errMsg := extractOCIErrorMessage(err)
+		task.LastMessage = errMsg
+		s.logTaskExecution(taskID, "error", errMsg)
 	} else {
 		task.SuccessCount++
 		task.LastMessage = "创建成功"
@@ -231,4 +248,49 @@ func (s *TaskService) GetTaskLogs(taskID string, page, pageSize int) ([]models.T
 func (s *TaskService) ClearTaskLogs(taskID string) error {
 	db := database.GetDB()
 	return db.Where("task_id = ?", taskID).Delete(&models.TaskLog{}).Error
+}
+
+// ExecuteTaskOnce 执行一次任务（不启动定时调度）
+func (s *TaskService) ExecuteTaskOnce(taskID string) error {
+	db := database.GetDB()
+	var task models.OciCreateTask
+	if err := db.Where("id = ?", taskID).First(&task).Error; err != nil {
+		return fmt.Errorf("任务不存在: %w", err)
+	}
+
+	var user models.OciUser
+	if err := db.Where("id = ?", task.UserID).First(&user).Error; err != nil {
+		s.logTaskExecution(taskID, "error", fmt.Sprintf("配置不存在: %v", err))
+		return fmt.Errorf("配置不存在: %w", err)
+	}
+
+	var sshKey models.SSHKey
+	if err := db.Where("id = ?", task.SSHKeyID).First(&sshKey).Error; err != nil {
+		s.logTaskExecution(taskID, "error", fmt.Sprintf("SSH密钥不存在: %v", err))
+		return fmt.Errorf("SSH密钥不存在: %w", err)
+	}
+
+	ctx := context.Background()
+	err := s.ociService.CreateInstance(ctx, &user, task.OciRegion, task.Architecture, task.OperationSystem,
+		task.Ocpus, task.Memory, task.Disk, task.BootVolumeVpu, sshKey.PublicKey, task.ImageId)
+
+	now := time.Now()
+	task.ExecuteCount++
+	task.LastExecuteTime = &now
+
+	if err != nil {
+		errMsg := extractOCIErrorMessage(err)
+		task.LastMessage = errMsg
+		task.Status = "error"
+		s.logTaskExecution(taskID, "error", errMsg)
+		db.Save(&task)
+		return fmt.Errorf("%s", errMsg)
+	}
+
+	task.SuccessCount++
+	task.Status = "completed"
+	task.LastMessage = "创建成功"
+	s.logTaskExecution(taskID, "success", "创建成功")
+	db.Save(&task)
+	return nil
 }

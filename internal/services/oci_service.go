@@ -214,6 +214,8 @@ type LaunchInstanceParams struct {
 	Ocpus              float32
 	MemoryInGBs        float32
 	SshPublicKey       string
+	BootVolumeSizeGBs  int64
+	BootVolumeVpuPerGB int64
 }
 
 func (s *OCIService) LaunchInstance(ctx context.Context, user *models.OciUser, params LaunchInstanceParams) (*core.Instance, error) {
@@ -222,15 +224,24 @@ func (s *OCIService) LaunchInstance(ctx context.Context, user *models.OciUser, p
 		return nil, err
 	}
 
+	// 构建引导卷配置
+	sourceDetails := core.InstanceSourceViaImageDetails{
+		ImageId: &params.ImageId,
+	}
+	if params.BootVolumeSizeGBs > 0 {
+		sourceDetails.BootVolumeSizeInGBs = &params.BootVolumeSizeGBs
+	}
+	if params.BootVolumeVpuPerGB > 0 {
+		sourceDetails.BootVolumeVpusPerGB = &params.BootVolumeVpuPerGB
+	}
+
 	req := core.LaunchInstanceRequest{
 		LaunchInstanceDetails: core.LaunchInstanceDetails{
 			CompartmentId:      &params.CompartmentId,
 			AvailabilityDomain: &params.AvailabilityDomain,
 			DisplayName:        &params.DisplayName,
-			SourceDetails: &core.InstanceSourceViaImageDetails{
-				ImageId: &params.ImageId,
-			},
-			Shape: &params.Shape,
+			SourceDetails:      &sourceDetails,
+			Shape:              &params.Shape,
 			CreateVnicDetails: &core.CreateVnicDetails{
 				SubnetId: &params.SubnetId,
 			},
@@ -253,7 +264,7 @@ func (s *OCIService) LaunchInstance(ctx context.Context, user *models.OciUser, p
 }
 
 // CreateInstance 自动创建实例（自动获取AD、VCN、子网，可指定镜像ID）
-func (s *OCIService) CreateInstance(ctx context.Context, user *models.OciUser, region, architecture, operationSystem string, ocpus, memory float64, disk int, sshPublicKey string, imageIdParam string) error {
+func (s *OCIService) CreateInstance(ctx context.Context, user *models.OciUser, region, architecture, operationSystem string, ocpus, memory float64, disk int, vpusPerGB int64, sshPublicKey string, imageIdParam string) error {
 	// 临时切换用户区域
 	originalRegion := user.OciRegion
 	user.OciRegion = region
@@ -368,6 +379,8 @@ func (s *OCIService) CreateInstance(ctx context.Context, user *models.OciUser, r
 		Ocpus:              float32(ocpus),
 		MemoryInGBs:        float32(memory),
 		SshPublicKey:       sshPublicKey,
+		BootVolumeSizeGBs:  int64(disk),
+		BootVolumeVpuPerGB: vpusPerGB,
 	}
 
 	_, err = s.LaunchInstance(ctx, user, params)

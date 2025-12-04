@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -27,11 +28,13 @@ type CreateTaskRequest struct {
 	Ocpus           float64 `json:"ocpus"`
 	Memory          float64 `json:"memory"`
 	Disk            int     `json:"disk"`
+	BootVolumeVpu   int64   `json:"bootVolumeVpu"`
 	Architecture    string  `json:"architecture"`
 	OperationSystem string  `json:"operationSystem"`
 	ImageId         string  `json:"imageId"`
 	SSHKeyID        string  `json:"sshKeyId" binding:"required"`
 	Interval        int     `json:"interval"`
+	ExecuteOnce     bool    `json:"executeOnce"`
 }
 
 func (tc *TaskController) CreateTask(c *gin.Context) {
@@ -65,11 +68,20 @@ func (tc *TaskController) CreateTask(c *gin.Context) {
 	if req.Disk <= 0 {
 		req.Disk = 50
 	}
+	if req.BootVolumeVpu <= 0 {
+		req.BootVolumeVpu = 10
+	}
 	if req.Architecture == "" {
 		req.Architecture = "ARM"
 	}
 	if req.OperationSystem == "" {
 		req.OperationSystem = "Ubuntu"
+	}
+
+	// 如果是只执行一次，状态设置为 pending，执行后变为 completed 或 error
+	status := "running"
+	if req.ExecuteOnce {
+		status = "pending"
 	}
 
 	task := &models.OciCreateTask{
@@ -80,15 +92,32 @@ func (tc *TaskController) CreateTask(c *gin.Context) {
 		Ocpus:           req.Ocpus,
 		Memory:          req.Memory,
 		Disk:            req.Disk,
+		BootVolumeVpu:   req.BootVolumeVpu,
 		Architecture:    req.Architecture,
 		OperationSystem: req.OperationSystem,
 		ImageId:         req.ImageId,
 		SSHKeyID:        req.SSHKeyID,
 		Interval:        req.Interval,
-		Status:          "running",
+		Status:          status,
 		CreateTime:      time.Now(),
 	}
 
+	if req.ExecuteOnce {
+		// 只执行一次模式：先创建任务记录，然后立即执行
+		if err := database.GetDB().Create(task).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, "创建任务失败"))
+			return
+		}
+		// 立即执行一次
+		if err := tc.taskService.ExecuteTaskOnce(task.ID); err != nil {
+			c.JSON(http.StatusOK, models.ErrorResponse(500, err.Error()))
+			return
+		}
+		c.JSON(http.StatusOK, models.SuccessResponse(task, "实例创建成功"))
+		return
+	}
+
+	// 定时任务模式
 	if err := tc.taskService.AddTask(task); err != nil {
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, "创建任务失败"))
 		return
@@ -211,6 +240,32 @@ func (tc *TaskController) DeleteTask(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "任务已删除"))
+}
+
+type BatchDeleteTaskRequest struct {
+	TaskIDs []string `json:"taskIds" binding:"required"`
+}
+
+func (tc *TaskController) BatchDeleteTask(c *gin.Context) {
+	var req BatchDeleteTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	var failedCount int
+	for _, taskID := range req.TaskIDs {
+		if err := tc.taskService.DeleteTask(taskID); err != nil {
+			failedCount++
+		}
+	}
+
+	if failedCount > 0 {
+		c.JSON(http.StatusOK, models.SuccessResponse(nil, fmt.Sprintf("删除完成，%d个失败", failedCount)))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(nil, "批量删除成功"))
 }
 
 type TaskLogsRequest struct {

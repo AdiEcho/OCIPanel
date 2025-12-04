@@ -131,6 +131,7 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 			task.POST("/start", taskCtrl.StartTask)
 			task.POST("/stop", taskCtrl.StopTask)
 			task.POST("/delete", taskCtrl.DeleteTask)
+			task.POST("/batchDelete", taskCtrl.BatchDeleteTask)
 			task.POST("/logs", taskCtrl.TaskLogs)
 			task.POST("/clearLogs", taskCtrl.ClearTaskLogs)
 		}

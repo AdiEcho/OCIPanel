@@ -114,7 +114,12 @@
               </td>
               <td class="px-6 py-4">
                 <div class="flex gap-2">
-                  <button class="btn btn-primary text-sm" title="配置详情" @click="viewConfigDetails(config)">
+                  <button class="btn btn-success btn-sm" title="创建实例" @click="createInstance(config)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                  <button class="btn btn-primary btn-sm" title="配置详情" @click="viewConfigDetails(config)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         stroke-linecap="round"
@@ -129,15 +134,9 @@
                         d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
                       />
                     </svg>
-                    详情
                   </button>
-                  <button class="btn btn-success text-sm" title="创建实例" @click="createInstance(config)">
+                  <button class="btn btn-secondary btn-sm" title="编辑配置" @click="editConfig(config)">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-                    </svg>
-                  </button>
-                  <button class="text-blue-400 hover:text-blue-300" title="编辑配置" @click="editConfig(config)">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         stroke-linecap="round"
                         stroke-linejoin="round"
@@ -146,8 +145,8 @@
                       />
                     </svg>
                   </button>
-                  <button class="text-red-400 hover:text-red-300" title="删除配置" @click="deleteConfig(config.id)">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <button class="btn btn-danger btn-sm" title="删除配置" @click="deleteConfig(config.id)">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path
                         stroke-linecap="round"
                         stroke-linejoin="round"
@@ -1151,10 +1150,16 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-3 gap-4">
             <div>
               <label class="block text-sm font-medium text-slate-300 mb-2">磁盘(GB)</label>
               <input v-model.number="instanceForm.disk" type="number" min="50" class="input" required />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-300 mb-2">VPU/GB</label>
+              <select v-model.number="instanceForm.bootVolumeVpu" class="input">
+                <option v-for="vpu in [10,20,30,40,50,60,70,80,90,100,110,120]" :key="vpu" :value="vpu">{{ vpu }}</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-medium text-slate-300 mb-2">架构</label>
@@ -1199,7 +1204,15 @@
             </p>
           </div>
 
-          <div>
+          <div class="flex items-center gap-3 py-2">
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input v-model="instanceForm.isTaskMode" type="checkbox" class="checkbox" />
+              <span class="text-sm font-medium text-slate-300">抢占实例任务</span>
+            </label>
+            <span class="text-xs text-slate-400">（开启后将持续尝试创建实例直到成功）</span>
+          </div>
+
+          <div v-if="instanceForm.isTaskMode">
             <label class="block text-sm font-medium text-slate-300 mb-2">执行间隔（秒）</label>
             <input v-model.number="instanceForm.interval" type="number" min="10" class="input" placeholder="60" />
             <p class="text-xs text-slate-400 mt-2">
@@ -1210,7 +1223,7 @@
           <div class="flex gap-3 pt-4">
             <button type="button" class="btn btn-secondary flex-1" @click="closeInstanceModal">取消</button>
             <button type="submit" class="btn btn-primary flex-1" :disabled="submittingInstance">
-              {{ submittingInstance ? '创建中...' : '创建任务' }}
+              {{ submittingInstance ? '创建中...' : (instanceForm.isTaskMode ? '创建任务' : '创建实例') }}
             </button>
           </div>
         </form>
@@ -2047,11 +2060,13 @@ const instanceForm = ref({
   ocpus: 1,
   memory: 6,
   disk: 50,
+  bootVolumeVpu: 10,
   architecture: 'ARM',
   operationSystem: 'Ubuntu',
   imageId: '',
   sshKeyId: '',
-  interval: 60
+  interval: 60,
+  isTaskMode: true
 })
 
 const sshKeys = ref([])
@@ -2425,11 +2440,13 @@ const closeInstanceModal = () => {
     ocpus: 1,
     memory: 6,
     disk: 50,
+    bootVolumeVpu: 10,
     architecture: 'ARM',
     operationSystem: 'Ubuntu',
     imageId: '',
     sshKeyId: '',
-    interval: 60
+    interval: 60,
+    isTaskMode: true
   }
 }
 
@@ -2442,14 +2459,20 @@ const submitInstanceTask = async () => {
       ocpus: instanceForm.value.ocpus,
       memory: instanceForm.value.memory,
       disk: instanceForm.value.disk,
+      bootVolumeVpu: instanceForm.value.bootVolumeVpu || 10,
       architecture: instanceForm.value.architecture,
       operationSystem: instanceForm.value.operationSystem,
       imageId: instanceForm.value.imageId,
       sshKeyId: instanceForm.value.sshKeyId,
-      interval: instanceForm.value.interval || 60
+      interval: instanceForm.value.interval || 60,
+      executeOnce: !instanceForm.value.isTaskMode
     }
-    await api.post('/task/create', payload)
-    toast.success('定时任务创建成功，可在任务列表查看执行状态')
+    const response = await api.post('/task/create', payload)
+    if (instanceForm.value.isTaskMode) {
+      toast.success('定时任务创建成功，可在任务列表查看执行状态')
+    } else {
+      toast.success(response.message || '实例创建请求已提交')
+    }
     closeInstanceModal()
   } catch (error) {
     toast.error(error.message || '创建失败')

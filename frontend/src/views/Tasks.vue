@@ -2,13 +2,29 @@
   <div class="space-y-6">
     <!-- 页面标题 -->
     <div class="flex justify-between items-center">
-      <h1 class="text-3xl font-bold">任务列表</h1>
+      <div class="flex items-center gap-4">
+        <h1 class="text-3xl font-bold">任务列表</h1>
+        <span v-if="selectedTaskIds.length > 0" class="text-sm text-slate-400">
+          已选择 {{ selectedTaskIds.length }} 项
+        </span>
+      </div>
       <div class="flex gap-2">
+        <button 
+          v-if="selectedTaskIds.length > 0" 
+          class="btn btn-danger" 
+          @click="batchDeleteTasks"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+          批量删除
+        </button>
         <select v-model="statusFilter" class="input w-32" @change="loadTasks(1)">
           <option value="">全部状态</option>
           <option value="running">运行中</option>
           <option value="stopped">已停止</option>
           <option value="completed">已完成</option>
+          <option value="error">失败</option>
         </select>
         <button class="btn btn-secondary" @click="loadTasks(currentPage)">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -25,6 +41,15 @@
         <table class="w-full">
           <thead class="bg-slate-700/50">
             <tr>
+              <th class="px-4 py-4 text-center w-12">
+                <input 
+                  type="checkbox" 
+                  class="checkbox" 
+                  :checked="isAllSelected" 
+                  :indeterminate="isIndeterminate"
+                  @change="toggleSelectAll"
+                />
+              </th>
               <th class="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase">配置名</th>
               <th class="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase">区域</th>
               <th class="px-4 py-4 text-left text-xs font-semibold text-slate-300 uppercase">配置</th>
@@ -37,7 +62,7 @@
           </thead>
           <tbody class="divide-y divide-slate-700">
             <tr v-if="loading">
-              <td colspan="8" class="px-6 py-8 text-center text-slate-400">
+              <td colspan="9" class="px-6 py-8 text-center text-slate-400">
                 <svg class="animate-spin h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -45,9 +70,17 @@
               </td>
             </tr>
             <tr v-else-if="!tasks.length">
-              <td colspan="8" class="px-6 py-8 text-center text-slate-400">暂无任务</td>
+              <td colspan="9" class="px-6 py-8 text-center text-slate-400">暂无任务</td>
             </tr>
             <tr v-for="task in tasks" v-else :key="task.id" class="hover:bg-slate-700/30">
+              <td class="px-4 py-4 text-center">
+                <input 
+                  type="checkbox" 
+                  class="checkbox" 
+                  :checked="selectedTaskIds.includes(task.id)"
+                  @change="toggleSelectTask(task.id)"
+                />
+              </td>
               <td class="px-4 py-4 font-medium">{{ task.username || '-' }}</td>
               <td class="px-4 py-4">
                 <span class="px-2 py-1 text-xs font-semibold rounded-full bg-blue-500/20 text-blue-300">
@@ -65,7 +98,8 @@
                   :class="{
                     'bg-green-500/20 text-green-300': task.status === 'running',
                     'bg-yellow-500/20 text-yellow-300': task.status === 'stopped',
-                    'bg-blue-500/20 text-blue-300': task.status === 'completed'
+                    'bg-blue-500/20 text-blue-300': task.status === 'completed',
+                    'bg-red-500/20 text-red-300': task.status === 'error'
                   }"
                 >
                   {{ statusMap[task.status] || task.status }}
@@ -219,7 +253,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../utils/api'
 import { toast } from '../utils/toast'
 
@@ -230,11 +264,46 @@ const pageSize = 10
 const totalPages = ref(0)
 const statusFilter = ref('')
 const actionLoading = reactive({})
+const selectedTaskIds = ref([])
 
 const statusMap = {
   running: '运行中',
   stopped: '已停止',
-  completed: '已完成'
+  completed: '已完成',
+  error: '失败'
+}
+
+// 选择相关
+const isAllSelected = computed(() => tasks.value.length > 0 && selectedTaskIds.value.length === tasks.value.length)
+const isIndeterminate = computed(() => selectedTaskIds.value.length > 0 && selectedTaskIds.value.length < tasks.value.length)
+
+const toggleSelectTask = (taskId) => {
+  const index = selectedTaskIds.value.indexOf(taskId)
+  if (index === -1) {
+    selectedTaskIds.value.push(taskId)
+  } else {
+    selectedTaskIds.value.splice(index, 1)
+  }
+}
+
+const toggleSelectAll = () => {
+  if (isAllSelected.value) {
+    selectedTaskIds.value = []
+  } else {
+    selectedTaskIds.value = tasks.value.map(t => t.id)
+  }
+}
+
+const batchDeleteTasks = async () => {
+  if (!confirm(`确定要删除选中的 ${selectedTaskIds.value.length} 个任务吗？相关日志也将被删除。`)) return
+  try {
+    await api.post('/task/batchDelete', { taskIds: selectedTaskIds.value })
+    toast.success(`成功删除 ${selectedTaskIds.value.length} 个任务`)
+    selectedTaskIds.value = []
+    await loadTasks(currentPage.value)
+  } catch (error) {
+    toast.error(error.message || '批量删除失败')
+  }
 }
 
 const showLogsModal = ref(false)

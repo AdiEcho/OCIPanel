@@ -186,6 +186,7 @@ type OciCreateTask struct {
 	Ocpus           float64    `gorm:"column:ocpus;default:1.0" json:"ocpus"`
 	Memory          float64    `gorm:"column:memory;default:6.0" json:"memory"`
 	Disk            int        `gorm:"column:disk;default:50" json:"disk"`
+	BootVolumeVpu   int64      `gorm:"column:boot_volume_vpu;default:10" json:"bootVolumeVpu"`
 	Architecture    string     `gorm:"column:architecture;default:ARM" json:"architecture"`
 	Interval        int        `gorm:"column:interval;default:60" json:"interval"`
 	CreateNumbers   int        `gorm:"column:create_numbers;default:1" json:"createNumbers"`
