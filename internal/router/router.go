@@ -18,12 +18,12 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 	r.Use(middleware.AuthMiddleware())
 
 	// 静态资源 - 前端构建文件
-	r.Static("/assets", "./frontend/dist/assets")
-	r.StaticFile("/favicon.ico", "./frontend/dist/favicon.ico")
+	r.Static("/assets", "./frontend-new/dist/assets")
+	r.StaticFile("/favicon.ico", "./frontend-new/dist/favicon.ico")
 
 	// 直接访问根路径返回前端页面
 	r.GET("/", func(c *gin.Context) {
-		c.File("./frontend/dist/index.html")
+		c.File("./frontend-new/dist/index.html")
 	})
 
 	ociService := services.NewOCIService(cfg)
@@ -139,7 +139,7 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 
 	// SPA fallback - 所有未匹配的路由都返回 index.html，让前端路由接管
 	r.NoRoute(func(c *gin.Context) {
-		c.File("./frontend/dist/index.html")
+		c.File("./frontend-new/dist/index.html")
 	})
 
 	return &Services{

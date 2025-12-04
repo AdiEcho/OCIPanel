@@ -5,7 +5,7 @@ echo ========================================
 
 echo.
 echo [1/2] Building Frontend (Lumina Style Studio)...
-cd frontend
+cd frontend-new
 call npm install
 if errorlevel 1 (
     echo Frontend dependencies installation failed!
