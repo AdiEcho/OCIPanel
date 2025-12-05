@@ -380,15 +380,19 @@ func (s *TelegramService) getMainKeyboard() *InlineKeyboardMarkup {
 	return &InlineKeyboardMarkup{
 		InlineKeyboard: [][]InlineKeyboardButton{
 			{
-				{Text: "🛎 一键测活", CallbackData: "check_alive"},
-				{Text: "📃 任务详情", CallbackData: "task_details"},
+				{Text: "🔍 一键测活", CallbackData: "check_alive"},
+				{Text: "📋 任务详情", CallbackData: "task_details"},
 			},
 			{
-				{Text: "🖥 实例统计", CallbackData: "instance_stats"},
-				{Text: "📊 配置列表", CallbackData: "config_list"},
+				{Text: "🖥️ 实例统计", CallbackData: "instance_stats"},
+				{Text: "📂 配置列表", CallbackData: "config_list"},
 			},
 			{
-				{Text: "💻 开源地址（欢迎Star⭐）", URL: "https://github.com/adiecho/oci-panel"},
+				{Text: "ℹ️ 版本信息", CallbackData: "version_info"},
+				{Text: "📊 流量统计", CallbackData: "traffic_stats"},
+			},
+			{
+				{Text: "⭐ 开源地址（欢迎Star）", URL: "https://github.com/adiecho/oci-panel"},
 			},
 			{
 				{Text: "❌ 关闭窗口", CallbackData: "cancel"},
@@ -428,6 +432,14 @@ func (s *TelegramService) handleCallback(callback *struct {
 
 	case "config_list":
 		text := s.getConfigList()
+		s.editMessage(chatID, messageID, text, s.getMainKeyboard())
+
+	case "version_info":
+		text := s.getVersionInfo()
+		s.editMessage(chatID, messageID, text, s.getMainKeyboard())
+
+	case "traffic_stats":
+		text := s.getTrafficStats()
 		s.editMessage(chatID, messageID, text, s.getMainKeyboard())
 
 	case "cancel":
@@ -563,6 +575,45 @@ func (s *TelegramService) getConfigList() string {
 
 	return fmt.Sprintf("【配置列表】\n\n🔑 总配置数：%d\n\n%s",
 		len(users), strings.Join(configs, "\n\n"))
+}
+
+func (s *TelegramService) getVersionInfo() string {
+	return fmt.Sprintf("【版本信息】\n\n📦 应用名称：OCI Panel\n🏷️ 当前版本：v1.0.0\n🔧 后端框架：Gin (Go)\n🎨 前端框架：Vue 3 + Vite\n💾 数据库：SQLite\n\n🕐 查询时间：%s",
+		time.Now().Format("2006-01-02 15:04:05"))
+}
+
+func (s *TelegramService) getTrafficStats() string {
+	db := database.GetDB()
+
+	var users []models.OciUser
+	if err := db.Find(&users).Error; err != nil {
+		return "❌ 获取配置失败"
+	}
+
+	if len(users) == 0 {
+		return "【流量统计】\n\n暂无配置"
+	}
+
+	var stats []string
+	for _, user := range users {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		trafficStats, err := s.ociService.GetMonthlyTrafficStats(ctx, &user)
+		cancel()
+
+		if err != nil {
+			stats = append(stats, fmt.Sprintf("❌ %s: 获取失败", user.Username))
+			continue
+		}
+
+		stats = append(stats, fmt.Sprintf("🔑 配置名：【%s】\n🌏 主区域：【%s】\n🖥️ 实例数量：【%d】台\n⬇️ 本月入站流量：%s\n⬆️ 本月出站流量：%s",
+			user.Username, user.OciRegion, trafficStats.InstanceCount,
+			FormatBytes(trafficStats.InboundTraffic),
+			FormatBytes(trafficStats.OutboundTraffic)))
+	}
+
+	return fmt.Sprintf("【流量统计】\n\n🕐 时间：%s\n\n%s",
+		time.Now().Format("2006-01-02 15:04:05"),
+		strings.Join(stats, "\n\n"))
 }
 
 func (s *TelegramService) SendNotification(title, message string) error {

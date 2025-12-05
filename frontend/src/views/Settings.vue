@@ -312,9 +312,8 @@ const systemInfo = [
                 <label class="text-sm font-medium mb-2 block">Bot Token</label>
                 <Input
                   v-model="telegramConfig.botToken"
-                  type="password"
                   placeholder="输入 Telegram Bot Token"
-                  class="font-mono"
+                  class="font-mono text-sm"
                   @blur="updateTelegramConfig"
                 />
                 <p class="text-xs text-muted-foreground mt-1">从 @BotFather 获取</p>

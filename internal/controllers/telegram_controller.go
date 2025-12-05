@@ -28,15 +28,8 @@ type TelegramConfigResponse struct {
 func (tc *TelegramController) GetConfig(c *gin.Context) {
 	botToken, chatID, enabled := tc.telegramService.GetConfig()
 
-	maskedToken := ""
-	if len(botToken) > 10 {
-		maskedToken = botToken[:6] + "****" + botToken[len(botToken)-4:]
-	} else if botToken != "" {
-		maskedToken = "****"
-	}
-
 	c.JSON(http.StatusOK, models.SuccessResponse(TelegramConfigResponse{
-		BotToken: maskedToken,
+		BotToken: botToken,
 		ChatID:   chatID,
 		Enabled:  enabled,
 		Running:  tc.telegramService.IsRunning(),
