@@ -11,6 +11,7 @@ import (
 type Services struct {
 	Scheduler *services.SchedulerService
 	Task      *services.TaskService
+	Telegram  *services.TelegramService
 }
 
 func Setup(r *gin.Engine, cfg *config.Config) *Services {
@@ -33,6 +34,7 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 	wsService := services.NewWebSocketService()
 	schedulerService := services.NewSchedulerService(ociService)
 	taskService := services.NewTaskService(ociService)
+	telegramService := services.NewTelegramService(ociService)
 
 	wsCtrl := controllers.NewWebSocketController(wsService)
 	r.GET("/ws/logs", wsCtrl.HandleWebSocket)
@@ -145,6 +147,18 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 			preset.GET("/list", presetCtrl.ListPresets)
 			preset.GET("/detail", presetCtrl.GetPreset)
 		}
+
+		telegramCtrl := controllers.NewTelegramController(telegramService)
+		telegram := api.Group("/telegram")
+		{
+			telegram.POST("/getConfig", telegramCtrl.GetConfig)
+			telegram.POST("/updateConfig", telegramCtrl.UpdateConfig)
+			telegram.POST("/testConnection", telegramCtrl.TestConnection)
+			telegram.POST("/sendTestMessage", telegramCtrl.SendTestMessage)
+			telegram.POST("/startBot", telegramCtrl.StartBot)
+			telegram.POST("/stopBot", telegramCtrl.StopBot)
+			telegram.GET("/status", telegramCtrl.GetBotStatus)
+		}
 	}
 
 	// SPA fallback - 所有未匹配的路由都返回 index.html，让前端路由接管
@@ -155,5 +169,6 @@ func Setup(r *gin.Engine, cfg *config.Config) *Services {
 	return &Services{
 		Scheduler: schedulerService,
 		Task:      taskService,
+		Telegram:  telegramService,
 	}
 }

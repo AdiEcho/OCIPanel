@@ -10,7 +10,11 @@ import {
   Code,
   Loader2,
   FolderOpen,
-  Activity
+  Activity,
+  Send,
+  Play,
+  Square,
+  TestTube
 } from 'lucide-vue-next'
 import api from '@/lib/api'
 import { toast } from '@/composables/useToast'
@@ -32,6 +36,17 @@ const cacheConfig = ref({
   cacheEnabled: false,
   cacheInterval: 30
 })
+
+const telegramConfig = ref({
+  botToken: '',
+  chatId: '',
+  enabled: false,
+  running: false
+})
+
+const telegramLoading = ref(false)
+const testingConnection = ref(false)
+const sendingTestMessage = ref(false)
 
 const loadConfig = async () => {
   loading.value = true
@@ -73,8 +88,81 @@ const refreshCache = async () => {
   }
 }
 
+const loadTelegramConfig = async () => {
+  telegramLoading.value = true
+  try {
+    const response = await api.post('/telegram/getConfig', {})
+    if (response.data) {
+      telegramConfig.value = response.data
+    }
+  } catch {
+    toast.error('加载 Telegram 配置失败')
+  } finally {
+    telegramLoading.value = false
+  }
+}
+
+const updateTelegramConfig = async () => {
+  try {
+    await api.post('/telegram/updateConfig', {
+      botToken: telegramConfig.value.botToken,
+      chatId: telegramConfig.value.chatId,
+      enabled: telegramConfig.value.enabled
+    })
+    toast.success('Telegram 配置已更新')
+    await loadTelegramConfig()
+  } catch {
+    toast.error('更新 Telegram 配置失败')
+  }
+}
+
+const testTelegramConnection = async () => {
+  testingConnection.value = true
+  try {
+    await api.post('/telegram/testConnection', {})
+    toast.success('连接测试成功')
+  } catch {
+    toast.error('连接测试失败，请检查 Bot Token')
+  } finally {
+    testingConnection.value = false
+  }
+}
+
+const sendTelegramTestMessage = async () => {
+  sendingTestMessage.value = true
+  try {
+    await api.post('/telegram/sendTestMessage', {})
+    toast.success('测试消息发送成功')
+  } catch {
+    toast.error('发送测试消息失败')
+  } finally {
+    sendingTestMessage.value = false
+  }
+}
+
+const startTelegramBot = async () => {
+  try {
+    await api.post('/telegram/startBot', {})
+    toast.success('Telegram Bot 已启动')
+    await loadTelegramConfig()
+  } catch {
+    toast.error('启动 Bot 失败')
+  }
+}
+
+const stopTelegramBot = async () => {
+  try {
+    await api.post('/telegram/stopBot', {})
+    toast.success('Telegram Bot 已停止')
+    await loadTelegramConfig()
+  } catch {
+    toast.error('停止 Bot 失败')
+  }
+}
+
 onMounted(() => {
   loadConfig()
+  loadTelegramConfig()
 })
 
 const systemInfo = [
@@ -194,11 +282,123 @@ const systemInfo = [
         </CardContent>
       </Card>
 
-      <!-- System Configuration Card -->
+      <!-- Telegram Settings Card -->
       <Card
         v-motion
         :initial="{ opacity: 0, y: 20 }"
         :enter="{ opacity: 1, y: 0, transition: { delay: 300 } }"
+        class="border-border/50"
+      >
+        <CardHeader class="border-b border-border/50">
+          <CardTitle class="flex items-center gap-2">
+            <Send class="w-5 h-5 text-primary" />
+            Telegram 通知
+          </CardTitle>
+        </CardHeader>
+        <CardContent class="p-0 divide-y divide-border/50">
+          <div v-if="telegramLoading" class="text-center py-8">
+            <Loader2 class="w-8 h-8 mx-auto animate-spin text-primary" />
+          </div>
+          <template v-else>
+            <div class="flex items-center justify-between px-6 py-4">
+              <div>
+                <p class="font-medium">启用 Telegram 通知</p>
+                <p class="text-sm text-muted-foreground mt-1">接收任务执行结果和系统通知</p>
+              </div>
+              <Switch v-model="telegramConfig.enabled" @update:model-value="updateTelegramConfig" />
+            </div>
+            <div class="px-6 py-4 space-y-4">
+              <div>
+                <label class="text-sm font-medium mb-2 block">Bot Token</label>
+                <Input
+                  v-model="telegramConfig.botToken"
+                  type="password"
+                  placeholder="输入 Telegram Bot Token"
+                  class="font-mono"
+                  @blur="updateTelegramConfig"
+                />
+                <p class="text-xs text-muted-foreground mt-1">从 @BotFather 获取</p>
+              </div>
+              <div>
+                <label class="text-sm font-medium mb-2 block">Chat ID</label>
+                <Input
+                  v-model="telegramConfig.chatId"
+                  placeholder="输入您的 Telegram Chat ID"
+                  class="font-mono"
+                  @blur="updateTelegramConfig"
+                />
+                <p class="text-xs text-muted-foreground mt-1">从 @userinfobot 获取</p>
+              </div>
+            </div>
+            <div class="flex items-center justify-between px-6 py-4">
+              <div>
+                <p class="font-medium">Bot 运行状态</p>
+                <p class="text-sm text-muted-foreground mt-1">
+                  Bot 启动后可通过 /start 命令与 Bot 交互
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <Badge :variant="telegramConfig.running ? 'success' : 'secondary'">
+                  {{ telegramConfig.running ? '运行中' : '已停止' }}
+                </Badge>
+                <Button
+                  v-if="telegramConfig.running"
+                  variant="outline"
+                  size="sm"
+                  @click="stopTelegramBot"
+                >
+                  <Square class="w-4 h-4" />
+                  停止
+                </Button>
+                <Button
+                  v-else
+                  variant="outline"
+                  size="sm"
+                  :disabled="!telegramConfig.enabled || !telegramConfig.botToken || !telegramConfig.chatId"
+                  @click="startTelegramBot"
+                >
+                  <Play class="w-4 h-4" />
+                  启动
+                </Button>
+              </div>
+            </div>
+            <div class="flex items-center justify-between px-6 py-4">
+              <div>
+                <p class="font-medium">测试功能</p>
+                <p class="text-sm text-muted-foreground mt-1">测试连接或发送测试消息</p>
+              </div>
+              <div class="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  :disabled="!telegramConfig.botToken || testingConnection"
+                  @click="testTelegramConnection"
+                >
+                  <Loader2 v-if="testingConnection" class="w-4 h-4 animate-spin" />
+                  <TestTube v-else class="w-4 h-4" />
+                  测试连接
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  :disabled="!telegramConfig.enabled || !telegramConfig.botToken || !telegramConfig.chatId || sendingTestMessage"
+                  @click="sendTelegramTestMessage"
+                >
+                  <Loader2 v-if="sendingTestMessage" class="w-4 h-4 animate-spin" />
+                  <Send v-else class="w-4 h-4" />
+                  发送测试
+                </Button>
+              </div>
+            </div>
+          </template>
+        </CardContent>
+      </Card>
+
+      <!-- System Configuration Card -->
+      <Card
+        v-motion
+        :initial="{ opacity: 0, y: 20 }"
+        :enter="{ opacity: 1, y: 0, transition: { delay: 400 } }"
         class="border-border/50"
       >
         <CardHeader class="border-b border-border/50">
@@ -228,7 +428,7 @@ const systemInfo = [
       <Card
         v-motion
         :initial="{ opacity: 0, y: 20 }"
-        :enter="{ opacity: 1, y: 0, transition: { delay: 400 } }"
+        :enter="{ opacity: 1, y: 0, transition: { delay: 500 } }"
         class="border-border/50"
       >
         <CardHeader class="border-b border-border/50">

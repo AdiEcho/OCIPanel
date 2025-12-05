@@ -26,6 +26,13 @@ func main() {
 	services.Task.Start()
 	defer services.Task.Stop()
 
+	// 启动 Telegram Bot（如果已配置并启用）
+	_, _, tgEnabled := services.Telegram.GetConfig()
+	if tgEnabled {
+		services.Telegram.StartBot()
+		defer services.Telegram.StopBot()
+	}
+
 	log.Printf("Server starting on port %s", cfg.Server.Port)
 	if err := r.Run(":" + cfg.Server.Port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
