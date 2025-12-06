@@ -103,9 +103,9 @@ const isActivePath = (path: string) => {
         <div class="p-6 border-b border-border/50">
           <div class="flex items-center gap-3">
             <div
-              class="w-10 h-10 bg-gradient-to-br from-primary to-cyan-400 rounded-xl flex items-center justify-center glow-primary"
+              class="w-10 h-10 bg-gradient-to-br from-primary to-cyan-400 rounded-xl flex items-center justify-center"
             >
-              <Cloud class="w-6 h-6 text-primary-foreground" />
+              <Cloud class="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 class="text-xl font-display font-bold text-gradient">OCI Panel</h1>
