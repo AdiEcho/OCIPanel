@@ -108,7 +108,7 @@ const isActivePath = (path: string) => {
               <Cloud class="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 class="text-xl font-display font-bold text-gradient">OCI Panel</h1>
+              <h1 class="text-xl font-display font-bold text-primary">OCI Panel</h1>
             </div>
           </div>
         </div>
