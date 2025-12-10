@@ -1034,11 +1034,11 @@ func (s *OCIService) GetPasswordExpiresAfter(ctx context.Context, user *models.O
 		return 0, fmt.Errorf("failed to list password policies: %w", err)
 	}
 
-	// 查找 Custom 类型的策略
+	// 查找 Custom 类型的策略（通过 PasswordStrength 字段判断）
 	if listPoliciesResp.PasswordPolicies.Resources != nil {
 		for _, policy := range listPoliciesResp.PasswordPolicies.Resources {
-			// 检查是否为 Custom 策略
-			if policy.Name != nil && strings.Contains(strings.ToLower(*policy.Name), "custom") {
+			// 检查是否为 Custom 策略（使用 PasswordStrength 字段）
+			if policy.PasswordStrength == identitydomains.PasswordPolicyPasswordStrengthCustom {
 				if policy.PasswordExpiresAfter != nil {
 					return *policy.PasswordExpiresAfter, nil
 				}
@@ -1077,8 +1077,8 @@ func (s *OCIService) UpdatePasswordExpiresAfter(ctx context.Context, user *model
 	}
 
 	for _, policy := range listPoliciesResp.PasswordPolicies.Resources {
-		// 检查是否为 Custom 策略
-		if policy.Name != nil && strings.Contains(strings.ToLower(*policy.Name), "custom") {
+		// 检查是否为 Custom 策略（使用 PasswordStrength 字段）
+		if policy.PasswordStrength == identitydomains.PasswordPolicyPasswordStrengthCustom {
 			if policy.Id == nil {
 				continue
 			}
