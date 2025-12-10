@@ -11,3 +11,4 @@ services:
       - ./keys:/app/keys
     environment:
       - TZ=Asia/Shanghai
+      - GIN_MODE=release
