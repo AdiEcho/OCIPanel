@@ -293,12 +293,16 @@ func (ic *InstanceController) AutoRescue(c *gin.Context) {
 	c.JSON(http.StatusOK, models.SuccessResponse(nil, "自动救援任务已启动，请等待完成"))
 }
 
+// Enable500MbpsRequest 一键开启500Mbps请求（简化版，仅需要userId和instanceId）
 type Enable500MbpsRequest struct {
 	UserId     string `json:"userId" binding:"required"`
 	InstanceId string `json:"instanceId" binding:"required"`
-	SSHPort    int    `json:"sshPort"`
 }
 
+// Enable500Mbps 一键开启下行500Mbps
+// 警告：此操作仅支持 VM.Standard.E2.1.Micro (AMD) 实例
+// 操作会自动：1. 创建NAT网关 2. 创建网络负载均衡器 3. 配置路由表 4. 放行安全规则
+// 开启后实例原公网IP将失效，请使用新分配的负载均衡器IP访问
 func (ic *InstanceController) Enable500Mbps(c *gin.Context) {
 	var req Enable500MbpsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -306,13 +310,12 @@ func (ic *InstanceController) Enable500Mbps(c *gin.Context) {
 		return
 	}
 
-	if req.SSHPort == 0 {
-		req.SSHPort = 22
-	}
+	// 使用默认SSH端口22
+	sshPort := 22
 
 	// 异步执行
 	go func() {
-		publicIP, err := ic.instanceService.Enable500Mbps(req.UserId, req.InstanceId, req.SSHPort)
+		publicIP, err := ic.instanceService.Enable500Mbps(req.UserId, req.InstanceId, sshPort)
 		if err != nil {
 			_ = err
 		} else {
@@ -320,16 +323,20 @@ func (ic *InstanceController) Enable500Mbps(c *gin.Context) {
 		}
 	}()
 
-	c.JSON(http.StatusOK, models.SuccessResponse(nil, "500Mbps开启任务已启动，请等待完成"))
+	c.JSON(http.StatusOK, models.SuccessResponse(map[string]interface{}{
+		"warning": "开启后实例原公网IP将失效，请使用新分配的负载均衡器IP访问。此操作仅支持 VM.Standard.E2.1.Micro 实例。",
+	}, "500Mbps开启任务已启动，正在创建NAT网关和网络负载均衡器，请稍候..."))
 }
 
+// Disable500MbpsRequest 一键关闭500Mbps请求（简化版，仅需要userId和instanceId）
 type Disable500MbpsRequest struct {
-	UserId      string `json:"userId" binding:"required"`
-	InstanceId  string `json:"instanceId" binding:"required"`
-	RetainNatGw bool   `json:"retainNatGw"`
-	RetainNlb   bool   `json:"retainNlb"`
+	UserId     string `json:"userId" binding:"required"`
+	InstanceId string `json:"instanceId" binding:"required"`
 }
 
+// Disable500Mbps 一键关闭下行500Mbps
+// 警告：此操作会删除NAT网关和网络负载均衡器
+// 关闭后需要重新为实例分配公网IP才能访问
 func (ic *InstanceController) Disable500Mbps(c *gin.Context) {
 	var req Disable500MbpsRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -337,13 +344,53 @@ func (ic *InstanceController) Disable500Mbps(c *gin.Context) {
 		return
 	}
 
+	// 默认清理所有资源（NAT网关和网络负载均衡器）
+	retainNatGw := false
+	retainNlb := false
+
 	// 异步执行
 	go func() {
-		err := ic.instanceService.Disable500Mbps(req.UserId, req.InstanceId, req.RetainNatGw, req.RetainNlb)
+		err := ic.instanceService.Disable500Mbps(req.UserId, req.InstanceId, retainNatGw, retainNlb)
 		if err != nil {
 			_ = err
 		}
 	}()
 
-	c.JSON(http.StatusOK, models.SuccessResponse(nil, "500Mbps关闭任务已启动，请等待完成"))
+	c.JSON(http.StatusOK, models.SuccessResponse(map[string]interface{}{
+		"warning": "关闭后NAT网关和网络负载均衡器将被删除，实例将失去公网访问能力，需要重新分配公网IP。",
+	}, "500Mbps关闭任务已启动，正在清理NAT网关和网络负载均衡器，请稍候..."))
+}
+
+// Check500MbpsSupport 检查实例是否支持500Mbps功能
+// 仅 VM.Standard.E2.1.Micro (AMD) 实例支持此功能
+type Check500MbpsSupportRequest struct {
+	UserId     string `json:"userId" binding:"required"`
+	InstanceId string `json:"instanceId" binding:"required"`
+}
+
+func (ic *InstanceController) Check500MbpsSupport(c *gin.Context) {
+	var req Check500MbpsSupportRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, models.ErrorResponse(400, err.Error()))
+		return
+	}
+
+	supported, shape, err := ic.instanceService.Check500MbpsSupport(req.UserId, req.InstanceId)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse(500, err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, models.SuccessResponse(map[string]interface{}{
+		"supported": supported,
+		"shape":     shape,
+		"message":   getShapeSupportMessage(supported),
+	}, "检查完成"))
+}
+
+func getShapeSupportMessage(supported bool) string {
+	if supported {
+		return "此实例支持一键开启/关闭下行500Mbps功能"
+	}
+	return "此实例不支持500Mbps功能，仅 VM.Standard.E2.1.Micro 实例支持此功能"
 }
