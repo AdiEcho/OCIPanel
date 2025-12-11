@@ -367,9 +367,9 @@ func (s *OCIService) CreateInstance(ctx context.Context, user *models.OciUser, r
 				return fmt.Errorf("等待VCN创建超时")
 			}
 		} else {
-			// 使用现有VCN的CIDR
-			if targetVcn.CidrBlock != nil {
-				cidrBlock = *targetVcn.CidrBlock
+			// 使用现有VCN的CIDR（使用CidrBlocks替代已弃用的CidrBlock）
+			if len(targetVcn.CidrBlocks) > 0 {
+				cidrBlock = targetVcn.CidrBlocks[0]
 			}
 		}
 
